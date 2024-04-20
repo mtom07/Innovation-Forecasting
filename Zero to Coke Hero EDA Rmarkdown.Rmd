@@ -1,0 +1,2235 @@
+---
+title: "EDA - Zero to Coke Hero: MSBA Capstone Spring 2024"
+author: "Ian Donaldson, Michael Tom, Andrew Walton, Jake Jarrard"
+date:  "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    css: custom-styles.css
+    theme: null
+    highlight: null
+    toc: true
+    toc_float: false
+---
+
+
+```{r setup, include=FALSE}
+if (!require("pacman")) install.packages("pacman")
+
+# Use pacman to load (and install if necessary) the specific packages you requested
+pacman::p_load(dplyr, ggplot2, tidyverse, tidytext, skimr, readr, tidyr, lubridate, stringr, knitr, kableExtra, forcats, patchwork, scales, car, lares, data.table, zoo)
+
+```
+
+
+# EDA Introduction, Purpose, & Objectives
+
+### Business Problem:
+
+
+> Swire Coca-Cola operates extensively, producing, selling, and distributing beverages across 13 states in the American West. The company is known for its regular introduction of new, often limited-time, products aimed at stimulating market demand. However, predicting accurate demand for these innovative products remains a significant challenge. Historical data provides some insight but is insufficient for precise forecasting due to variations in regional and demographic appeal.
+
+> The firm stands at the forefront of the Western US beverage distribution sector, continually launching limited edition products to maintain consumer interest and market dominance. Yet, the uncertainty in demand forecasting for these unique items presents risks of either overproduction or shortages, each carrying potential financial and reputational impacts. The project aims to leverage demographic and historical sales data to enhance the accuracy of demand predictions for future innovative offerings.
+
+
+### The Benefit of a Solution: 
+
+> A precise demand forecast for Swire Coca-Cola's innovative products is imperative for the company to meet all potential demand without overproducing, thereby maximizing revenue and elevating customer satisfaction. By strategically launching the right products in suitable regions at optimal times, Swire can attain a market advantage, reinforce its position as an industry trendsetter, and foster brand loyalty among increasingly diverse consumers.
+
+### Analytics Approach: 
+
+> Our analytics team is set to use Exploratory Data Analysis (EDA), Time Series Forecasting techniques like ARIMA and SARIMA models, and Machine Learning algorithms to analyze over 24 million observations collected over three years. This vast dataset includes sales data for more than 3100 unique products across 13 western states with varied demographics. Our goal is to identify the optimal launch periods for new products and pinpoint the essential attributes contributing to their success, while also managing production-related costs effectively. We will adhere to standard data science methodologies, including the division of data into training and testing sets to ensure the validity of our model predictions and demand forecasts.
+
+> The project presents several analytical challenges. Firstly, we must determine the best approach to integrate external data sources, such as demographic and zip code information, with our primary market demand dataset to enhance regional and demographic-specific demand forecasting. Secondly, the variability in the release durations of historical and future products, ranging from 13 weeks to six months, necessitates tailored analytical approaches to utilize historical data effectively. By addressing these challenges, our team aims to develop robust models that will enable Swire Coca-Cola to accurately forecast demand for innovative products, thereby optimizing inventory levels and enhancing customer satisfaction.
+
+### Success Metrics:
+
+> Our success hinges on delivering accurate demand forecasts enabling Swire to balance supply with demand efficiently, ensuring no surplus stock or unmet consumer needs. The effectiveness of our forecasts will be reflected in the company's profitability, evaluated through our modeling outcomes against industry-standard performance indicators.
+
+> We will measure the project's success through the precision of our demand predictions for innovative products against real sales data. Key performance indicators include the model's ability to accurately determine the timing, location, duration, and quantity for each new product launch. These metrics aim to provide Swire with valuable insights, leading to financial benefits and an increased market share for their new offerings.
+
+
+### Description of the Data:
+
+> Our analysis will be supported by one critical dataset, essential for the construction of our predictive models, and a tertiery secondary demographic dataset. 
+
+> The primary dataset is Market Demand, encompassing historical sales data across diverse product categories, brands, caloric segments, and packaging types. This dataset is extensive, with over 24 million records, presenting significant considerations for data handling and analysis.
+
+> The secondary dataset comprises demographic details including age, income, gender, household income, and segmentation, coupled with zip code information. This allows for a nuanced approach to forecasting, enabling predictions tailored to specific demographic profiles based on historical sales patterns and census data.
+
+> Collectively, these datasets form a comprehensive time series analysis framework, comprising over 24 million observations across 13 features. This includes detailed sales information spanning three years for Swire Coca-Cola products, covering 13 western states and 3100 unique products, segmented into various sales territories, innovation product lines, and brand categories, alongside metrics for seasonal trends, financial impacts, and market dynamics.
+
+### Discussion of Missing Data:
+
+> The data set contains NA values for CALORIC_SEGMENT in its raw form comprising 0.2% (59725 missing values) of the data. Using text analysis on ITEM description, imputation was performed to determine the observation's CALORIC_SEGMENT as either diet/light or regular.
+
+### Scope: 
+
+> At the outset of this EDA endeavor, the project will attempt to concentrate on crafting predictive models and generating business insights for seven specified new products. Deliverables include a PowerPoint presentation highlighting key insights, an annotated report delineating the code and model outputs, and all relevant code posted to GitHub for transparency. Future expansions may encompass tailored models for specific brands, locations, or periods to further refine forecasting accuracy.
+
+### Details: 
+
+> The project team comprises four analysts: Ian Donaldson, Michael Tom, Andrew Walton, and Jake Jarrard. The project is slated for completion and presentation to the client on April 11, 2024, with key milestones including exploratory data analysis completion by February 25, model building by March 24, and presentation finalization by April 10. This timeline ensures thorough analysis and model development, culminating in a comprehensive presentation of findings to Swire Coca-Cola. All members of the analytics team contributed equally to the production of this EDA effort and exploration of the data. 
+
+
+### Purpose of Notebook:
+
+> The purpose of this EDA notebook is to identify and analyze the Swire Coca-Cola data set looking for hints and clues on guidance of forecasting innovation products in a time series format. Additional feature engineering and data cleaning will be performed to prepare the data for time series forecasting and machine learning models.
+
+
+### Conclusion: 
+
+> By accurately forecasting demand for innovative limited-release beverages, Swire Coca-Cola can make informed decisions to optimize inventory levels, enhance customer satisfaction, and solidify its position as an industry leader in beverage innovation. The collaborative efforts of the analytics team will furnish Swire with the insights needed to navigate the complexities of new product launches successfully. It would be naive to suppose our EDA captured all of the essential elements we would want to know. Its size and complexity will be nearly impossible to fully understand. Ulimately we will need to break the dataset down into useable sub dataframes that will allow for very boutique feature engineering to capture inherent numeric information in each row, by product, flavor, market region, etc. However, this EDA experience in its entirety answers nearly all essential questions beneath the surface of 24 million rows and billions of dollars of soft drink sales in recent years. 
+
+
+
+# SECTION SUMMARIES
+
+> We have provided the following EDA in four sections. Summaries of each follow. Some comments are provided in individual sections when necessary. Most comments are captured inside R code output. Most code has been largely suppressed as has lengthy output. 
+
+## PART 1: SUMMARY STATISTICS & ESSENTIALS 
+
+
+> Several insights can be derived from the comprehensive review of the market demand datasheet. This section captures the essentials any data scientist would want to hear up front in terms of describing the data. Highlights as follows...
+
+> Upon examination of the DATE column, we observe approximately three years of data. Certain products within the dataset span the entire three years, while others are cataloged for less than six months. Products with shorter durations are likely to be more pertinent to our predictions regarding innovative products.
+
+> The analysis of the DATE attribute proves crucial, suggesting the potential utility of segmenting our models based on varying date ranges, such as 13 weeks or less than six months, to align more closely with the specific queries we aim to resolve.
+
+> Regarding CATEGORY, while energy drinks generate the highest revenue per unit, Soft Sodas (SSD) emerge as the predominantly sold category. This dynamic warrants closer inspection.
+
+> In comparison with other manufacturers, Swire-Coca-Cola (Swire-CC) presents an average performance in terms of total sales revenue and units sold. The concern arises from their lower unit price relative to competitors, leading to higher volume sales required to match the revenue of other manufacturers, which could potentially erode profit margins. Our analysis will thus aim to identify products with higher average unit prices for enhanced profitability.
+
+> Between the two caloric segments, diet/light and regular, both command similar prices per unit. However, regular beverages significantly outperform diet/light in both unit sales and total revenue, indicating a stronger market demand for regular sodas.
+
+> The primary challenge lies in sifting through the voluminous data to determine the most relevant fields and questions for focus. Identifying these areas will enable us to harness the extensive dataset effectively, feeding into the models we develop for robust analysis.
+
+
+## PART 2: DEEPER DIVE INTO INNOVATION CHARACTERISTICS
+
+> The sales data analysis of Swire Coca-Cola unveils critical insights. Initially, the dataset had 59,725 missing entries, all addressed through text analysis, achieving a state of zero missing values. The dataset covers 152 unique weeks, providing comprehensive weekly data for nearly three years, showcasing consistency in time-series data across two caloric segments, five categories, eight manufacturers, 319 brands, 103 package types, and 3,692 unique product descriptions.
+
+> Delving into product specifics, characteristics emerge, such as Diet Smash belonging to the energy category with three types of packaging. The Sparkling Jacceptabletlester brand offers both diet and regular options, available in diverse packaging, while Venomous Blast provides diet and regular choices, predominantly in "16small multi cup" packages. In manufacturer rankings, Swire holds the third position in sales, with Bubble Joy Advantageous leading in brand sales, followed by Real-Time and Peppy.
+
+> Data analysis indicates a left skew in brand run times, displaying a median of 137 weeks against a mean of 99.1 weeks, reflecting varied brand life spans. In contrast, package tenure shows right skewness, with longer tenures for established package sizes, evidenced by a median of 147 weeks and a mean of 117 weeks. However, 14 package sizes exhibit durations of less than six months, potentially signaling new packaging innovations.
+
+> Seasonal trends present inconsistencies, with missing weeks and notable fluctuations among all analyzed beverages, prompting further examination to clarify whether these arise from data omissions or natural product lifecycle conclusions. This necessitates meticulous validation of product start and end dates, especially for brands with intermittent data.
+
+> In conclusion, the detailed analysis sheds light on significant aspects of Swire Coca-Cola's sales trends and product dynamics, laying a foundation for enhanced forecasting accuracy and strategic product launch planning.
+
+
+## PART 3: EVEN DEEPER - MODELING EDA
+
+> This segment of the EDA is dedicated to organizing the data into suitable sets for modeling. We aim to identify any data inaccuracies that may lead to incorrect predictions and isolate segments that might introduce noise into the models. The final objective is to discern which attributes of our innovative products currently exist in our dataset, ensuring a clean and relevant data environment for predictive modeling.
+
+> During this phase, we undertook a comprehensive review of the datasets intended for model development. Key tasks included identifying multi-category items and filtering out non-essential categories to enhance model clarity. We noted the potential benefit of excluding data on ongoing sales, which could otherwise obscure the models with irrelevant variability. Additionally, our examination of sales tenure distributions by category underscored the need to incorporate these divergences into our modeling strategy effectively.
+
+> A crucial part of our evaluation focused on the yearly sales distribution, revealing significant month-to-month and group-to-group variations. Recognizing these temporal differences will be instrumental in shaping our models, especially in predicting seasonal trends and consumer behavior.
+
+> Delving into the specifics of modeling our innovation products posed unique challenges, given the sparse data for certain new product launches, including those with novel flavors or categories. Our preliminary analysis highlighted the intricacies and potential obstacles in accurately forecasting demand for these unique items.
+
+> Summarizing our findings, the exploration offers critical insights into our data's complexity and the strategic adjustments needed for our models. As we progress, these insights will guide the enhancement of our modeling techniques, aiming to produce more precise and actionable predictive analytics for our innovative product lines.
+
+
+## EDA PART 4: DEMOGRAPHIC DATA 
+
+
+> We used several tools to reshape the provided demographic data. We transformed and un-pivoted criteria, segment, and count and created a wide format dataframe from the original XLS and preserved all numbers. We conducted simple calculations to capture the aggregate population and households of each zip code and then we used the zip_to_market_unit_mapping.csv to assign each zip code to its appropriate Market Segment. We removed all Zip codes that were not associated with a Market Segment. We renamed the columns as appropriate. Our dataset contains all 2232 Zip codes with their respective demographic data in 83 total columns. The following exploration captures the essential elements of only the demographic data prior to associating it with the main Swire dataset. Despite learning a great deal about the demographic data, it remains to be seen if it can be married properly to the main Swire dataset for use in modeling. 
+
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+# EDA - PART 1: SUMMARY STATISTICS & ESSENTIALS
+
+
+```{r, include=FALSE}
+# Turn off scientific notation
+options(scipen = 999)
+swire_df <- readRDS("swire_no_nas.rds")
+#summary(swire_df)
+
+```
+
+
+
+```{r, include=FALSE}
+
+# Converting relevant columns to factors
+
+swire_df$CATEGORY <- as.factor(swire_df$CATEGORY)
+swire_df$CALORIC_SEGMENT <- as.factor(swire_df$CALORIC_SEGMENT)
+swire_df$MANUFACTURER <- as.factor(swire_df$MANUFACTURER)
+swire_df$BRAND <- as.factor(swire_df$BRAND)
+swire_df$PACKAGE <- as.factor(swire_df$PACKAGE)
+swire_df$MARKET_KEY <- as.factor(swire_df$MARKET_KEY)
+swire_df$DATE <- as.Date(swire_df$DATE)
+swire_df$UNIT_PRICE <- swire_df$DOLLAR_SALES / swire_df$UNIT_SALES
+
+```
+
+
+
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+## Summary of Data Set and Columns
+
+```{r}
+
+#Quick summary of data inspection and manipulation: 
+#1: Factored a number of columns 
+#2: Imputed all NA's (The only NAs were in the CALORIC_SEGMENT column and we used text analytics to impute DIET & REGULAR)
+#3: Ensured DATE column data type was convered to a date as.Date()
+#4: Created a UNIT_PRICE column: swire_df$UNIT_PRICE <- swire_df$DOLLAR_SALES / swire_df$UNIT_SALES
+
+summary(swire_df)
+
+
+#Outliers: 
+
+# UNIT_PRICE: The Max Unit Price seems very high compared to the rest of the observations; no apparent explanation for this as there doesn't seem to be any products in the data set that should sell for that price. 
+
+# UNIT_SALES: The Max Unit Sales seems very high compared to the rest of the observations. This could be that they have a certain product that is very popular included in the data set, but it would be worth exploring
+
+```
+
+## Exploratory Visualizations, Summary Tables & Essential Takeaways
+
+### Takeaway 1: Average Price Per Unit
+
+```{r}
+brand_ppu_summary <- swire_df %>%
+  group_by(BRAND) %>%
+  summarise(n = n(),
+            avg_price_unit = mean(UNIT_PRICE),
+            avg_sales_dollars = mean(DOLLAR_SALES),
+            avg_unit_sales = mean(UNIT_SALES)
+  ) %>%
+  arrange(desc(avg_price_unit)) %>%
+  head(10)
+
+brand_ppu_summary
+
+```
+
+```{r fig.width= 10, fig.height= 6}
+
+ggplot(brand_ppu_summary, aes(x = BRAND )) +
+  geom_bar(aes(y = avg_price_unit, fill = BRAND), stat = "identity", position = "dodge") +
+  labs(title = "Average Price Per Unit by Brand",
+       x = "Brand",
+       y = "Price Per Unit") +
+   scale_fill_manual(values = c("ALL-OUT ALLIGATOR REAL-TIME" = "darkred", "KEKE ENERGY ENERGY EXTRA STRENGTH" = "red", "KEKE ENERGY ENERGY ORIGINAL" = "red", "CUPADA ARID REMAINING" = "grey", "REAL-TIME" = "grey", "MYTHICAL BEVERAGE ABGREENERUTELY ZERO" = "grey", "MYTHICAL BEVERAGE LO CARB" = "grey", "MEXICAN BUBBLE JOY ADVANTAGEOUS" = "grey", "MYTHICAL BEVERAGE ULTRA" = "grey", "MYTHICAL BEVERAGE" = "grey")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1))
+
+# Several products have a much higher average unit sales price than the mean ($4.50). This includes one product with and average price of $35.00 and then another tier of products with average prices between $10-$15. These products may not need to sell as many units to be able to reach a high number of total sales dollars due to the high prices associated with the products. 
+
+rm(brand_ppu_summary)
+```
+
+
+
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+### Takeaway 2: Large Total Dollar Sales
+
+```{r}
+brand_summary <- swire_df %>%
+  group_by(BRAND) %>%
+  summarise(n = n(),
+            total_sales_dollars = sum(DOLLAR_SALES),
+            total_unit_sales = sum(UNIT_SALES)
+  ) %>%
+  arrange(desc(total_sales_dollars)) %>%
+  head(10)
+
+brand_summary
+```
+
+
+```{r fig.width= 10, fig.height= 6}
+ggplot(brand_summary, aes(x = BRAND )) +
+  geom_bar(aes(y = total_sales_dollars, fill = BRAND), stat = "identity", position = "dodge") +
+  labs(title = "Total Dollar Sales by Brand",
+       x = "Brand",
+       y = "Total Dollar Sales") +
+   scale_fill_manual(values = c("BUBBLE JOY ADVANTAGEOUS" = "darkred", "REAL-TIME" = "red", "PEPPY" = "red", "PAPI" = "red", "DIET BUBBLE JOY ADVANTAGEOUS" = "grey", "ELF BUBBLES" = "grey", "HILL MOISTURE" = "grey", "REAL-TIME EDITIONS" = "grey", "MYTHICAL BEVERAGE ULTRA" = "grey", "MYTHICAL BEVERAGE" = "grey")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1))
+
+# A handful of brands exceed $1B in total sales dollars, and several more above $500M. We are obviously dealing with very large and well known brands in this data set.
+
+rm(brand_summary)
+```
+
+
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+### Takeaway 3: Manufacturers Average Sales
+
+```{r}
+
+man_avg_summary <- swire_df %>%
+  group_by(MANUFACTURER) %>%
+  summarise(n = n(),
+            avg_price_unit = mean(UNIT_PRICE),
+            avg_sales_dollars = mean(DOLLAR_SALES),
+            avg_unit_sales = mean(UNIT_SALES)
+  ) %>%
+  arrange(desc(avg_sales_dollars))
+
+man_avg_summary
+
+```
+
+```{r}
+
+ggplot(man_avg_summary, aes(x = MANUFACTURER )) +
+  geom_bar(aes(y = avg_sales_dollars, fill = MANUFACTURER), stat = "identity", position = "dodge") +
+  labs(title = "Average Dollar Sales by Manufacturer",
+       x = "Manufacturer",
+       y = "Average Dollar Sales") +
+  scale_fill_manual(values = c("SWIRE-CC" = "red", "JOLLYS" = "grey", "COCOS" = "grey", "ALLYS" = "grey", "PONYS" = "grey", "BEARS" = "grey", "JORDYS" = "grey", "KEKES" = "grey")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1))
+
+# Swire-CC is 4th in average sales when compared to other manufacturers in the data set. Their average sales are only a little more than half of the average sales of the ALLYS. Although, they rank #2 in the number of observations in the data behind Jollys. There are numerous inferences that can be made from the table above. 
+
+```
+
+
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+
+### Takeaway 4: Manufacturers Total Sales
+
+```{r}
+
+man_ts_summary <- swire_df %>%
+  group_by(MANUFACTURER) %>%
+  summarise(n = n(),
+            total_sales_dollars = sum(DOLLAR_SALES),
+            total_unit_sales = sum(UNIT_SALES)
+  ) %>%
+  arrange(desc(total_sales_dollars))
+
+man_ts_summary
+
+```
+
+
+```{r}
+
+ggplot(man_ts_summary, aes(x = MANUFACTURER )) +
+  geom_bar(aes(y = total_sales_dollars, fill = MANUFACTURER), stat = "identity", position = "dodge") +
+  labs(title = "Total Dollar Sales by Manufacturer",
+       x = "Manufacturer",
+       y = "Total Dollar Sales") +
+  scale_fill_manual(values = c("SWIRE-CC" = "red", "JOLLYS" = "grey", "COCOS" = "grey", "ALLYS" = "grey", "PONYS" = "grey", "BEARS" = "grey", "JORDYS" = "grey", "KEKES" = "grey")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1))
+
+# Swire-CC is 3rd total revenues when compared to other manufacturers. COCOS has nearly twice as many total sales as SWIRE-CC, though COCO's also has higher priced packaged items than Swire. 
+
+```
+
+ 
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+### Takeaway 5: Manufacturers Average Unit Price
+
+```{r}
+
+man_up_summary<- swire_df %>%
+  group_by(MANUFACTURER) %>%
+  summarise(n = n(),
+            total_sales_dollars = sum(DOLLAR_SALES),
+            average_unit_price = mean(UNIT_PRICE)
+  ) %>%
+  arrange(desc(average_unit_price))
+
+man_up_summary
+
+```
+
+```{r}
+
+ggplot(man_up_summary, aes(x = MANUFACTURER )) +
+  geom_bar(aes(y = average_unit_price, fill = MANUFACTURER), stat = "identity", position = "dodge") +
+  labs(title = "Average Unit Price by Manufacturer",
+       x = "Manufacturer",
+       y = "Average Unit Price") +
+  scale_fill_manual(values = c("SWIRE-CC" = "red", "JOLLYS" = "grey", "COCOS" = "grey", "ALLYS" = "grey", "PONYS" = "grey", "BEARS" = "grey", "JORDYS" = "grey", "KEKES" = "grey")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1))
+
+# The average unit price has a large range when grouped by manufacturers, and SWIRE-CC is near the bottom of this list; since we know that Coca Cola is the largest soft drink manufacturer in the world, it isn't a surprise that the overall price per ounce of soda is likely less than its competitors. 
+
+#KEKES, ALLYS, and PONYS all do significantly less total dollar sales and total unit sales than SWIRE-CC, but all 3 are selling their units at a much higher price; this may prove to be a point worth further discovery as smaller companies that produce in smaller quantities may prove to be a good study for short term product production.  
+
+rm(man_avg_summary)
+rm(man_up_summary)
+rm(man_ts_summary)
+```
+
+
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+### Takeaway 6: Caloric Segment
+
+```{r}
+
+man_cs_summary <- swire_df %>%
+  group_by(CALORIC_SEGMENT) %>%
+  summarise(n = n(),
+            avg_price_unit = mean(UNIT_PRICE),
+            avg_sales_dollars = mean(DOLLAR_SALES),
+            avg_unit_sales = mean(UNIT_SALES),
+            total_sales_dollars = sum(DOLLAR_SALES)
+  ) %>%
+  arrange(desc(avg_sales_dollars))
+
+man_cs_summary
+
+```
+
+```{r}
+
+swire_df %>%
+  group_by(CALORIC_SEGMENT) %>%
+  summarise(n = n(),
+            total_sales_dollars = sum(DOLLAR_SALES),
+            total_unit_sales = sum(UNIT_SALES)
+  ) %>%
+  arrange(desc(total_sales_dollars))
+
+```
+
+```{r}
+
+ggplot(man_cs_summary, aes(x = CALORIC_SEGMENT )) +
+  geom_bar(aes(y = total_sales_dollars, fill = CALORIC_SEGMENT), stat = "identity", position = "dodge") +
+  labs(title = "Caloric Segment by Total Sales Dollars",
+       x = "Caloric Segment",
+       y = "Total Sales Dollars") +
+  theme_classic() +
+  scale_fill_manual(values = c( "DIET/LIGHT" = "grey", "REGULAR" = "red")) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1))
+
+# There is a large difference in total unit sales and total dollar sales between regular soft drinks and diet/light.  Regular drinks show about double the unit sales and dollar sales even though total observations are split nearly down the middle 50/50 between regular and diet. 
+
+rm(man_cs_summary)
+```
+
+
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+### Takeaway 7: Category SSD is by far the Biggest Category
+
+```{r}
+
+cat_summary <- swire_df %>%
+  group_by(CATEGORY) %>%
+  summarise(n = n(),
+            avg_price_unit = mean(UNIT_PRICE),
+            avg_sales_dollars = mean(DOLLAR_SALES),
+            avg_unit_sales = mean(UNIT_SALES),
+            total_sales_dollars = sum(DOLLAR_SALES)
+  ) %>%
+  arrange(desc(avg_sales_dollars))
+
+cat_summary
+
+```
+
+```{r}
+
+swire_df %>%
+  group_by(CATEGORY) %>%
+  summarise(n = n(),
+            total_sales_dollars = sum(DOLLAR_SALES),
+            total_unit_sales = sum(UNIT_SALES)
+  ) %>%
+  arrange(desc(total_sales_dollars))
+
+```
+
+
+
+```{r}
+
+ggplot(cat_summary, aes(x = CATEGORY )) +
+  geom_bar(aes(y = total_sales_dollars, fill = CATEGORY), stat = "identity", position = "dodge") +
+  labs(title = "Total Sales Dollars by Category",
+       x = "Category",
+       y = "Total Sales Dollars") +
+  theme_classic() +
+  scale_fill_manual(values = c( "SPARKLING WATER" = "grey", "SSD" = "red", "ING ENHANCED WATER" = "grey", "COFFEE" = "grey", "ENERGY" = "grey")) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1))
+
+# SSD accounts for the vast majority of total sales in both units and dollars. This is likely to be interepreted as standard soda, both diet and regular - the classics we know and love. Swire-CC generates most of their revenue from this category. Though the "Energy Drink" category may prove to be useful to use in modeling scenarios, it may prove more useful for our team to focus on SSD products when we consider how Swire-CC would launch innovation products. 
+
+rm(cat_summary)
+```
+
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+### Takeaway 8: Energy Drinks have the highest Average Sale Price by Category
+
+```{r}
+
+cat_up_summary <- swire_df %>%
+  group_by(CATEGORY) %>%
+  summarise(n = n(),
+            avg_price_unit = mean(UNIT_PRICE),
+            avg_sales_dollars = mean(DOLLAR_SALES),
+            avg_unit_sales = mean(UNIT_SALES)
+  ) %>%
+  arrange(desc(avg_price_unit))
+
+cat_up_summary
+
+```
+
+```{r}
+
+ggplot(cat_up_summary, aes(x = CATEGORY )) +
+  geom_bar(aes(y = avg_price_unit, fill = CATEGORY), stat = "identity", position = "dodge") +
+  labs(title = "Average Price per Unit by Category",
+       x = "Category",
+       y = "Average Price Per Unit") +
+  theme_classic() +
+  scale_fill_manual(values = c( "SPARKLING WATER" = "grey", "SSD" = "grey", "ING ENHANCED WATER" = "grey", "COFFEE" = "grey", "ENERGY" = "red")) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1))
+
+# Energy drinks sell at a much higher price per unit than the other categories. This means that assuming their cost to produce is not much different from the other caloric segments, producing more energy drinks would be an easy way to increase margins and could prove useful in comparing and contrasting innovation products against current sellers in this emerging category. It is also no surprise that the typical energy drink costs 2x at most locations than standard bottled soda products. 
+
+rm(cat_up_summary)
+```
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+### Takeaway 9: Initial Observations of Innovation Product Characteristics
+
+```{r}
+# All Brand and Package combinations
+swire_df %>%
+  group_by(BRAND, PACKAGE) %>%
+  summarise(MIN_DATE = min(DATE),
+            MAX_DATE = max(DATE),
+            DURATION = MAX_DATE - MIN_DATE) %>%
+  arrange(desc(DURATION))
+
+
+
+
+```
+
+
+```{r}
+# launch DATE, end DATE, and DURATION of brand or package less than 6 months, or 26 weeks, in duration
+swire_df %>%
+  group_by(BRAND, PACKAGE) %>%
+  summarise(MIN_DATE = min(DATE),
+            MAX_DATE = max(DATE),
+            DURATION = MAX_DATE - MIN_DATE) %>%
+  filter(DURATION < 180) %>%
+  filter(DURATION > 30) %>%
+  arrange(desc(DURATION))
+
+# As an initial foray into determining the characteristics of "Innovation Products" some of the data surrounding launch and packaging caught our attention. If we were to define innovation products as being in the market for at least 30 days but less than 6 months, we see there are 95 different brand packaging combinations that fit this criteria in our historic data set out of a total of 1720 Package and Brand Combinations. Does packaging matter for an innovation product? 
+
+
+```
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+### Takeaway 10: Potential Innovation Products - Brand & Packaging Combinations ~13 Weeks
+
+
+```{r}
+
+swire_df %>%
+  group_by(BRAND, PACKAGE) %>%
+  summarise(n = n(),
+            MIN_DATE = min(DATE),
+            MAX_DATE = max(DATE),
+            DURATION = MAX_DATE - MIN_DATE) %>%
+  filter(DURATION < 100 ) %>%
+  filter(DURATION > 81) %>%
+  arrange(desc(DURATION))
+
+# 3 of the 7 questions Swire raised were related to 13 week launches. 13*7 = 91 days, ergo this table presents a glimpse at products on the market between 80-100 days and also released around the same time frames as Swire-CC anticipates releasing a handfull of Innovation Products.
+
+```
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+
+
+
+```{r loada data and packages, message = FALSE, warning = FALSE}
+# Load the data
+#df <- readRDS("swire_no_nas.rds")
+#write to csv for other tools
+#write.csv(df, "swire_no_nas.csv")
+```
+
+# EDA - PART 2: DEEPER DIVE INTO INNOVATION CHARACTERISTICS
+
+
+```{r additional feature engineering, message = FALSE, warning = FALSE}
+# Team added a few more columns and features to the dataset for a deeper dive. 
+
+#season column based on date
+#Months broken up into seasons for potential feature engineering uses, along with sales per unit.
+
+df <- swire_df
+rm(swire_df)
+names(df)[names(df) == "UNIT_PRICE"] <- "SINGLE_PRICE"
+
+
+df <- df %>%
+  mutate(MONTH = month(ymd(df$DATE)), # Extract month from the date
+         SEASON = case_when(
+           MONTH %in% c(12, 1, 2) ~ "WINTER",
+           MONTH %in% c(3, 4, 5) ~ "SPRING",
+           MONTH %in% c(6, 7, 8) ~ "SUMMER",
+           MONTH %in% c(9, 10, 11) ~ "FALL",
+           TRUE ~ NA_character_ 
+         ))
+
+
+```
+
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+
+```{r fix character types, message = FALSE, warning = FALSE}
+
+#convert date to date type
+df$DATE <- as.Date(df$DATE)
+
+
+
+#factorize
+df <- df %>%
+  mutate(BRAND = as.character(BRAND),
+         PACKAGE = as.character(PACKAGE)) %>%
+  mutate(across(c(BRAND, PACKAGE, CATEGORY, MANUFACTURER, SEASON), ~as.factor(.)))
+
+
+#one hot encode CALORIC_SEGMENT as 0 or 1
+df <- df %>%
+mutate(across(CALORIC_SEGMENT, ~ifelse(. == "REGULAR", 1, 0)))
+
+
+# Print the result
+# validate data types
+# After feature data type conversion, the data is ready for exploratory data analysis.
+str(df)
+
+```
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+## Exploratory Visualizations, Summary Tables & Essential Takeaways
+
+
+### Swire Innovation Brands Summary 
+```{r unique features of brands for swire questions, message = FALSE, warning = FALSE}
+
+#echo BRAND name and spacing
+cat("\n DIET SMASH \n")
+
+#BRAND == DIET SMASH
+df %>%
+  filter(BRAND == "DIET SMASH") %>%
+  select(MANUFACTURER,CALORIC_SEGMENT, CATEGORY, PACKAGE, ) %>%
+  summary()
+
+
+#echo BRAND name and spacing
+cat("\n SPARKLING JACCEPTABLETLESTER \n")
+
+#BRAND == JACCEPTABLETESTER
+df %>%
+  filter(BRAND == "SPARKLING JACCEPTABLETLESTER") %>%
+  select(MANUFACTURER,CALORIC_SEGMENT, CATEGORY, PACKAGE) %>%
+  summary()
+
+#echo BRAND name and spacing
+cat("\n VENOMOUS BLAST \n")
+
+#BRAND == VENOMOUS BLAST
+df %>%
+  filter(BRAND == "VENOMOUS BLAST") %>%
+  select(MANUFACTURER,CALORIC_SEGMENT, CATEGORY, PACKAGE) %>%
+  summary()
+
+#echo BRAND name and spacing
+cat("\n SQUARE \n")
+
+#BRAND == SQUARE
+df %>%
+  filter(BRAND == "SQUARE") %>%
+  select(MANUFACTURER,CALORIC_SEGMENT, CATEGORY, PACKAGE) %>%
+  summary()
+
+#echo BRAND name and spacing
+cat("\n GREETINGLE \n")
+
+#BRAND == GREETINGLE
+df %>%
+  filter(BRAND == "GREETINGLE") %>%
+  select(MANUFACTURER,CALORIC_SEGMENT, CATEGORY, PACKAGE) %>%
+  summary()
+
+#echo BRAND name and spacing
+cat("\n DIET MOONLIT \n")
+
+#BRAND == DIET MOONLIT
+df %>%
+  filter(BRAND == "DIET MOONLIT") %>%
+  select(MANUFACTURER,CALORIC_SEGMENT, CATEGORY, PACKAGE) %>%
+  summary()
+
+#echo BRAND name and spacing
+cat("\n PEPPY \n")
+
+#BRAND == PEPPY
+df %>%
+  filter(BRAND == "PEPPY") %>%
+  select(MANUFACTURER,CALORIC_SEGMENT, CATEGORY, PACKAGE) %>%
+  summary()
+```
+> Comments: The Diet Smash product is a diet product, in the energy category, and comes in 3 packaging types (Innovation - Packaging?). The Sparkling Jacceptabletlester brand comes in both diet/regular, straddles both sparkling water and sparkling soda drink categories, and comes in multiple different package types (but not innovation package "16small multi cup"). The Venomous Blast product comes in both diet and regular, in the energy category product, and comes in 3 packaging types (almost exclusively "16small multi cup", with two short term release sizes, but not future "innovation package?" "16 liquid small"). The Square brand comes in both diet and regular, in the 2 categories (sparkling water and ssd), and comes in 5 packaging types (several have extremely small counts - full innovation packaging?). The Greetingle brand comes in only diet, in the ING Enhanced Water category, and comes in 6 packaging types (all with relatively legit numbers, with the exception of one size). The Diet Moonlit brand comes in only diet, in the ssd category, and comes in multiple packaging types (all with legit numbers). The Peppy brand comes in only regular, in the ssd category, and comes in at least 6 packaging types (all with legit numbers, other could be explored more). 
+
+
+### Swire Innovation Brands Sales
+
+```{r deeper sales look, message = FALSE, warning = FALSE}
+
+
+
+#sales in thousands by manufacturer
+df %>%
+  group_by(MANUFACTURER) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES)) %>%
+  arrange(desc(TOTAL_SALES))
+
+#graph sales in thousands by manufacturer
+
+df %>%
+  group_by(MANUFACTURER) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES/1000)) %>%
+  ggplot(aes(x = reorder(MANUFACTURER, -TOTAL_SALES), y = TOTAL_SALES)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Total Sales in Thousands by Manufacturer",
+       x = "Manufacturer",
+       y = "$ Sales")
+
+#sales in thousands by top 10 package size
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES/1000)) %>%
+  arrange(desc(TOTAL_SALES)) %>%
+  head(10)
+
+#graph sales in thousands by top 10 ten package size
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES/1000)) %>%
+  arrange(desc(TOTAL_SALES)) %>%
+  head(10) %>%
+  ggplot(aes(x = reorder(PACKAGE, -TOTAL_SALES), y = TOTAL_SALES)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Top 10 Sales in Thousands by Package Size",
+       x = "Package Size",
+       y = "$ Sales")
+
+#bottom 10 sales in throusands by package size
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES)) %>%
+  arrange(TOTAL_SALES) %>%
+  head(10)
+
+
+#graph sales in thousands by bottom 10 package size
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES)) %>%
+  arrange(TOTAL_SALES) %>%
+  head(10) %>%
+  ggplot(aes(x = reorder(PACKAGE, TOTAL_SALES), y = TOTAL_SALES)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Bottom 10 Sales by Package Size",
+       x = "Package Size",
+       y = "$ Sales")
+
+#top 10 sales in thousands by brand
+df %>%
+  group_by(BRAND) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES/1000)) %>%
+  arrange(desc(TOTAL_SALES)) %>%
+  head(10)
+
+#graph sales in thousands by top 10 brand
+df %>%
+  group_by(BRAND) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES/1000)) %>%
+  arrange(desc(TOTAL_SALES)) %>%
+  head(10) %>%
+  ggplot(aes(x = reorder(BRAND, -TOTAL_SALES), y = TOTAL_SALES)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Top 10 Sales in Thousands by Brand",
+       x = "Brand",
+       y = "$ Sales")
+
+#bottom 10 sales in thousands by brand
+df %>%
+  group_by(BRAND) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES)) %>%
+  arrange(TOTAL_SALES) %>%
+  head(10)
+
+#graph sales in thousands by bottom 10 brand
+df %>%
+  group_by(BRAND) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES)) %>%
+  arrange(TOTAL_SALES) %>%
+  head(10) %>%
+  ggplot(aes(x = reorder(BRAND, TOTAL_SALES), y = TOTAL_SALES)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Bottom 10 Sales by Brand",
+       x = "Brand",
+       y = "$ Sales")
+
+#sales in thousands by category
+df %>%
+  group_by(CATEGORY) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES/1000)) %>%
+  arrange(desc(TOTAL_SALES))
+
+#graph sales in thousands by CATEGORY
+df %>%
+  group_by(CATEGORY) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES/1000)) %>%
+  ggplot(aes(x = reorder(CATEGORY, -TOTAL_SALES), y = TOTAL_SALES)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Total Sales in Thousands by Category",
+       x = "Category",
+       y = "$ Sales")
+
+#sales in thousands by season
+df %>%
+  group_by(SEASON) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES/1000)) %>%
+  arrange(desc(TOTAL_SALES))
+
+#graph sales by SEASON
+df %>%
+  group_by(SEASON) %>%
+  summarise(TOTAL_SALES = sum(DOLLAR_SALES/1000)) %>%
+  ggplot(aes(x = reorder(SEASON, -TOTAL_SALES), y = TOTAL_SALES)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Total Sales in Thousands by Season",
+       x = "Season",
+       y = "$ Sales")
+```
+
+> COMMENTS: Swire is in 3rd place for overall sales behind Jollys and Cocos for overall sales by manufacturer. The top 3 package sizes range from 12small 12one cup, 20small multi jug, and 16small multi cup. Bottom 3 sales by package size are 8.55small mlt shadyes jug, 20 small 15one jug, and 8.55small 6one shadyes jug. Bottom packges sizes are likely innovation package that did not do so well based on extremely small sales (<$40K). Bubble Joy Advantageous (a Coco's regular soda) is a clear winner in sales by brand, followed by real-time (Ally's primarily energy drink in diet/regular), and peppy (Swire-CC's regular soda). Bottom 10 sales by brand all falls into extremely small buckets of sales less than $6k, are these innovation product failures? The bottom three are Mist Twst Nat Cbry (Jolly's 1 single sale of regular soda), Tipcal Canary Twister Soda (1 single sale of Jolly's regular soda), and Vaultless (1 single sale of Coco's diet soda). The sparkling soda drink category is more than double the next (energy). ING Enhanced Water and Sparkling Water register as notable bottled drinks, but coffee barely scratches the surface in terms of sales. Summer and Spring are roughly about the same in terms of sales, followed by a slight drop in Winter, and a more noticeable drop for Fall. 
+
+
+### Product Observations 
+
+```{r brand length of time, message = FALSE, warning = FALSE}
+#top 10 longest running brands
+df %>%
+  group_by(BRAND) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  arrange(desc(LENGTH)) %>%
+  head(10)
+
+#shortest 10 running brands
+df %>%
+  group_by(BRAND) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  arrange(LENGTH) %>%
+  head(10)
+
+#median length of time for a brand
+df %>%
+  group_by(BRAND) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  summarise(median(LENGTH))
+
+#mean length of time for a brand
+df %>%
+  group_by(BRAND) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  summarise(mean(LENGTH))
+
+#density plot of brand run time
+df %>%
+  group_by(BRAND) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  ggplot(aes(x = LENGTH)) +
+  geom_density() +
+  labs(title = "Density Plot of Brand Run Time",
+       x = "Weeks",
+       y = "Frequency")
+
+#brands that run for less than 6 months
+df %>%
+  group_by(BRAND) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  filter(LENGTH < 26)
+
+#summarize features of brands that run for less than 6 months
+df %>%
+  group_by(BRAND) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  filter(LENGTH < 6) %>%
+  left_join(df, by = "BRAND") %>%
+  select(BRAND, CATEGORY, SEASON, PACKAGE, MANUFACTURER) %>%
+  distinct()
+
+
+```
+
+> COMMENT: The top 10 brands that run 148 or 152 weeks do not include some of the top sales by brands (are there missing weeks?). The top 10 shortest running brands include bottom brands by sales and only ran for 1 or two weeks, which makes sense if something only registered one single sale. The median length of a brand is 137 weeks, with mean brand run time falling in a 99.1 weeks. Therefore, the data likely exhibits left skewness, indicating that there are some brands with very short run times (which pull down the mean), while the median is higher due to the influence of some brands with longer run times. The histogram of brand run time shows a left skew with several stalwart brands running for a very long time, and a lot of brands, including innovation types, running for a shorter duration. As can be seen in the density plot there are two main humps or modes, one that clusters between 0 and ~25 weeks (6 months) trending down to a flatter line between week 50 and week 100, and another much larger cluster presumably dominated by the always on the shlef types cluster between 125 and 152 weeks. It may be worth looking for week 0/launch/tenure date spikes for those products that runs less than 6 months in order to determine start/stop times for any ARIMA/Time-Series models later.
+
+
+### Packaging Details
+
+```{r package length of time, message = FALSE, warning = FALSE}
+#top 10 longest running packages
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  arrange(desc(LENGTH)) %>%
+  head(10)
+
+#shortest 10 running packages
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  arrange(LENGTH) %>%
+  head(10)
+
+#median length of time for a package
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  summarise(median(LENGTH))
+
+#mean length of time for a package
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  summarise(mean(LENGTH))
+
+#density plot of package run time
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  ggplot(aes(x = LENGTH)) +
+  geom_density() +
+  labs(title = "Density Plot of Package Run Time",
+       x = "Weeks",
+       y = "Frequency")
+
+#packages that run for less than 6 months
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  filter(LENGTH < 26)
+
+#summarize features of packages that run for less than 6 months
+df %>%
+  group_by(PACKAGE) %>%
+  summarise(LENGTH = n_distinct(DATE)) %>%
+  filter(LENGTH < 6) %>%
+  left_join(df, by = "PACKAGE") %>%
+  select(PACKAGE, CATEGORY, SEASON, BRAND, MANUFACTURER) %>%
+  distinct()
+
+```
+
+> COMMENT: Top 10 packages run the entire length of the dataset, which is 152 weeks. These are tried and true packaging sizes that we have all likely grown up with, know and love to enjoy our beverages from, whether from a gas station or grocery store. The top 10 shortest packages range from 1 week to 7 weeks.  The median package run length is 147, indicating that tried and true packing overwhelmingly dominates distribution sales. The mean package tenure is 117 weeks. Therefore, the data likely exhibits right skewness, indicating that there are some packages with very high tenures (which push up the median), but the mean is lower due to the influence of some packages with shorter tenures. The density plot shows two primary modes, one smaller < 12 weeks, likely innovation dominated, and another larger > 140 weeks, legacy package sizes. There are 14 package sizes that run for less than 6 months or 26 weeks.
+
+
+### Innovation Characteristics
+
+```{r sales by brand and distinguising characterics from Qs, message = FALSE, warning = FALSE}
+#graph DOLLAR_SALES by DATE for BRAND == "DIET SMASH"
+df %>%
+  filter(BRAND == "DIET SMASH") %>%
+  ggplot(aes(x = DATE, y = DOLLAR_SALES)) +
+  geom_line() +
+  labs(title = "Sales for Diet Smash",
+       x = "Date",
+       y = "$ Sales")
+
+#graph DOLLAR_SALES by DATE for BRAND == "DIET SMASH" - INNOVATION PACKAGE == "2L MULTI JUG"
+df %>%
+  filter(BRAND == "DIET SMASH", PACKAGE == "2L MULTI JUG") %>%
+  ggplot(aes(x = DATE, y = DOLLAR_SALES)) +
+  geom_line() +
+  labs(title = "Sales for Diet Smash 2L Multi Jug",
+       x = "Date",
+       y = "$ Sales")
+
+
+
+#graph DOLLAR_SALES by DATE for BRAND == "SPARKLING JACCEPTABLETLESTER",
+#CATEGORY == "SSD", CALORIC_SEGMENT == REGULAR
+df %>%
+  filter(BRAND == "SPARKLING JACCEPTABLETLESTER", CATEGORY == "SSD",
+         CALORIC_SEGMENT == "1" ) %>%
+  ggplot(aes(x = DATE, y = DOLLAR_SALES)) +
+  geom_line() +
+  labs(title = "Sales for Regular Sparkling Jacceptabletlester Soft Drink",
+       x = "Date",
+       y = "$ Sales")
+
+#graph DOLLAR_SALES by DATE for BRAND == "VENOMOUS BLAST" and CATEGORY == DIET/LIGHT
+df %>%
+  filter(BRAND == "VENOMOUS BLAST", CALORIC_SEGMENT == 0) %>%
+  ggplot(aes(x = DATE, y = DOLLAR_SALES)) +
+  geom_line() +
+  labs(title = "Sales for Venomous Blast",
+       x = "Date",
+       y = "$ Sales")
+
+#graph DOLLAR_SALES by DATE for BRAND == "SQUARE"
+df %>%
+  filter(BRAND == "SQUARE") %>%
+  ggplot(aes(x = DATE, y = DOLLAR_SALES)) +
+  geom_line() +
+  labs(title = "Sales for Square",
+       x = "Date",
+       y = "$ Sales")
+
+#graph DOLLAR_SALES by DATE for BRAND == "GREETINGLE"
+df %>%
+  filter(BRAND == "GREETINGLE") %>%
+  ggplot(aes(x = DATE, y = DOLLAR_SALES)) +
+  geom_line() +
+  labs(title = "Sales for Greetingle",
+       x = "Date",
+       y = "$ Sales")
+
+#graph DOLLAR_SALES by DATE for BRAND == "DIET MOONLIT"
+df %>%
+  filter(BRAND == "DIET MOONLIT") %>%
+  ggplot(aes(x = DATE, y = DOLLAR_SALES)) +
+  geom_line() +
+  labs(title = "Sales for Diet Moonlit",
+       x = "Date",
+       y = "$ Sales")
+
+#graph DOLLAR_SALES by DATE for BRAND == "PEPPY"
+df %>%
+  filter(BRAND == "PEPPY") %>%
+  ggplot(aes(x = DATE, y = DOLLAR_SALES)) +
+  geom_line() +
+  labs(title = "Sales for Peppy",
+       x = "Date",
+       y = "$ Sales")
+
+
+
+```
+
+> COMMENT: Some seasonlity is observed in all drinks analyzed, with most including missing weeks and spikes. Are missing weeks, missing data, end of product lifecycle, or something else? The missing period seems common to several products analyzed.
+
+### Missing Date Analysis
+
+```{r missing week analysis, message = FALSE, warning = FALSE}
+
+#What are the common gaps between DATE where there is no weekly data for BRAND == "DIET SMASH"
+df %>%
+  filter(BRAND == "DIET SMASH") %>%
+  arrange(DATE) %>%
+  mutate(DIFF = DATE - lag(DATE)) %>%
+  filter(DIFF > 7) %>%
+  count(DIFF) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+#What are the common gaps between DATE where there is no weekly data for BRAND == "DIET SMASH" and PACKAGE == "2L MULTI JUG"
+df %>%
+  filter(BRAND == "DIET SMASH", PACKAGE == "2L MULTI JUG") %>%
+  arrange(DATE) %>%
+  mutate(DIFF = DATE - lag(DATE)) %>%
+  filter(DIFF > 7) %>%
+  count(DIFF) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+#What are the common gaps between DATE where there is no weekly data for BRAND == "SPARKLING JACCEPTABLETLESTER",
+#CATEGORY == "SSD", CALORIC_SEGMENT == REGULAR
+df %>%
+  filter(BRAND == "SPARKLING JACCEPTABLETLESTER", CATEGORY == "SSD",
+         CALORIC_SEGMENT == 1) %>%
+  arrange(DATE) %>%
+  mutate(DIFF = DATE - lag(DATE)) %>%
+  filter(DIFF > 7) %>%
+  count(DIFF) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+#What are the common gaps between DATE where there is no weekly data for BRAND == "VENOMOUS BLAST" and CALORIC_SEGMENT == DIET/LIGHT
+df %>%
+  filter(BRAND == "VENOMOUS BLAST", CALORIC_SEGMENT == 0 ) %>%
+  arrange(DATE) %>%
+  mutate(DIFF = DATE - lag(DATE)) %>%
+  filter(DIFF > 7) %>%
+  count(DIFF) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+#What are the common gaps between DATE where there is no weekly data for BRAND == "SQUARE"
+df %>%
+  filter(BRAND == "SQUARE") %>%
+  arrange(DATE) %>%
+  mutate(DIFF = DATE - lag(DATE)) %>%
+  filter(DIFF > 7) %>%
+  count(DIFF) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+#What are the common gaps between DATE where there is no weekly data for BRAND == "GREETINGLE"
+df %>%
+  filter(BRAND == "GREETINGLE") %>%
+  arrange(DATE) %>%
+  mutate(DIFF = DATE - lag(DATE)) %>%
+  filter(DIFF > 7) %>%
+  count(DIFF) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+#What are the common gaps between DATE where there is no weekly data for BRAND == "DIET MOONLIT"
+df %>%
+  filter(BRAND == "DIET MOONLIT") %>%
+  arrange(DATE) %>%
+  mutate(DIFF = DATE - lag(DATE)) %>%
+  filter(DIFF > 7) %>%
+  count(DIFF) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+#What are the common gaps between DATE where there is no weekly data for BRAND == "PEPPY"
+df %>%
+  filter(BRAND == "PEPPY") %>%
+  arrange(DATE) %>%
+  mutate(DIFF = DATE - lag(DATE)) %>%
+  filter(DIFF > 7) %>%
+  count(DIFF) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+
+
+```
+
+> COMMENT: The "Diet Smash" brand has a gap in dates of 42 days. If packaging such as "2L Multi Jug" is added in, Diet Smash has a gap of 35 days. The "regular Sparkling Jacceptabletler brand in the ssd category" has a gap of 42 days. The "Venomous Blast" brand has 2 gaps, one of 35 days and the other of 70 days. The "Square" brand has 7 gap lengths in dates, with the most common of 35 days occuring 3 times, and the longest being 126 days. The "Greetingle" brand has a single gap length of 35 days. The "Diet Moonlit" has a single gap of 42 days. The "Peppy" brand has a single gap of 42 days. Further analysis should be done to ensure start/stop dates for tenure are accurate and that we are not missing weekly data. The question is whether or not this constitutes missing data OR product taken off market and put back into the market based on supply, supply chain, or other business issues.  
+
+
+### Innovation Focus 
+
+```{r guess as to innovation set to focus on, message = FALSE, warning = FALSE}
+
+#most common launch DATE, end DATE, and TENURE of brand or package less than 6 months, or 26 weeks, in duration
+df %>%
+  group_by(BRAND, PACKAGE) %>%
+  summarise(MIN_DATE = min(DATE),
+            MAX_DATE = max(DATE),
+            TENURE = MAX_DATE - MIN_DATE) %>%
+  filter(TENURE < 26) %>%
+  arrange(desc(TENURE))
+
+#summarize top 10  brand or package less than 6 months, or 26 weeks, in duration for innovation set
+df %>%
+  group_by(BRAND, PACKAGE) %>%
+  summarise(MIN_DATE = min(DATE),
+            MAX_DATE = max(DATE),
+            TENURE = MAX_DATE - MIN_DATE) %>%
+  filter(TENURE < 26) %>%
+  arrange(desc(TENURE)) %>%
+  head(10)
+
+#density plot of TENURE less than 6 months, or 26 weeks.
+df %>%
+  group_by(BRAND, PACKAGE) %>%
+  summarise(MIN_DATE = min(DATE),
+            MAX_DATE = max(DATE),
+            TENURE = MAX_DATE - MIN_DATE) %>%
+  filter(TENURE < 26) %>%
+  ggplot(aes(x = TENURE)) +
+  geom_density() +
+  labs(title = "Density of Tenure less than 6 months",
+       x = "Tenure",
+       y = "Density")
+
+
+```
+
+> 145 Brand/Package sets under 6 months, with start and stop date to set as week 0. Will need to guarantee that each one is not missing week/date data for time series analysis. 9 of the top 10 brand/package sets from this set run 21 days, with the 10th running 14 days. October 7th is an extremely popular launch date. The most common tenure of the 145 brand/package combos with tenure less than 6 months run for less than 5 weeks in duration. 
+
+
+
+# EDA - PART 3: EVEN DEEPER - MODELING EDA
+
+
+## Category Check by Item
+
+```{r Category Check by Item, message = FALSE, warning = FALSE}
+### Create table counting each item and how many brand
+
+categories_count <- df %>%
+  group_by(ITEM) %>%
+  summarize(
+    num_manufacturers = n_distinct(MANUFACTURER),
+    num_category = n_distinct(CATEGORY),
+    num_market_key = n_distinct(MARKET_KEY),
+    num_caloric_segment = n_distinct(CALORIC_SEGMENT),
+    num_brand = n_distinct(BRAND),
+    num_package = n_distinct(PACKAGE)
+  )
+summary(categories_count)
+
+categories_count %>%
+  summarise(
+    count_more_than_one_caloric_segment = sum(num_caloric_segment > 1),
+    count_more_than_one_brand = sum(num_brand > 1),
+    count_more_than_one_package = sum(num_package > 1)
+  )
+
+#88 items fall into 2 or more brands
+#49 items fall into 2 or more categories
+#34 Items with 2 or more packages
+
+ df %>%
+  inner_join(categories_count %>% 
+                group_by(ITEM) %>%
+                filter(sum(num_brand) > 1) %>%
+                select(ITEM),
+            by = "ITEM") %>%
+   select(ITEM, BRAND) %>%
+   arrange(ITEM) %>%
+   distinct(ITEM, BRAND) %>%
+   head(5)
+
+# This DF shows that many of the items with 2 types of brand are both in Diet and Regular category. If we are using these items as filters in our model building we will need to remember this.
+   
+df %>%
+  inner_join(categories_count %>% 
+                group_by(ITEM) %>%
+                filter(sum(num_caloric_segment) > 1) %>%
+                select(ITEM),
+            by = "ITEM") %>%
+   select(ITEM, CALORIC_SEGMENT) %>%
+   arrange(ITEM) %>%
+   distinct(ITEM, CALORIC_SEGMENT) %>%
+   head(5)
+
+# As with the brand caloric segment has the same duplicate items in both segments. We will need to remember this in modeling
+ 
+df %>%
+  inner_join(categories_count %>% 
+                group_by(ITEM) %>%
+                filter(sum(num_package) > 1) %>%
+                select(ITEM),
+            by = "ITEM") %>%
+   select(ITEM, PACKAGE) %>%
+   arrange(ITEM) %>%
+   distinct(ITEM, PACKAGE) %>%
+   head(5)
+ 
+#Even though these items have a package in the item description we their packaging category changes. 
+# We see that there are products that fall into multiple Caloric Segments, Brands and Packages. We will need to keep these items in mind when building models. When creating our smaller data sets for modeling we will want to assure that we filter by these 3 categories. 
+
+```
+
+
+
+## Breaking out Items by Tenure
+
+```{r Create Sales Summary by Tenure Group, message = FALSE, warning = FALSE}
+#Create table to summarize total sale days
+
+sales_summary <- df %>%
+  group_by(ITEM) %>%
+  summarize(first_date = min(DATE), last_date = max(DATE), total_sales = sum(UNIT_SALES), total_revenue = sum(DOLLAR_SALES), total_sale_days = n_distinct(DATE))
+
+#Calculate Total window of days sold
+
+sales_summary <- sales_summary %>%
+  mutate(
+        duration_days = last_date - first_date,
+        duration_weeks = ceiling(as.numeric(duration_days) / 7),
+        launch13week_date =first_date + lubridate::weeks(13),
+        launch6month_date = first_date + months(6),
+        launch1year_date = first_date + lubridate::years(1),
+        avg_sales_per_week = ifelse(duration_weeks == 0, total_sales, total_sales / duration_weeks),
+)
+
+#Batch data in to categories 1 day sales, upto 13 week sales, 13 week to 6 months, 6 months to a year, more than a year = ongoing
+
+sales_summary$sales_category <- cut(sales_summary$duration_weeks, breaks = c(-Inf, 0, 13, 26, 52, Inf), 
+                         labels = c("One Day Sales", "13 Week Sales", "6 Month Sales", "1 Year Sales", "Ongoing"))
+
+# In the section we added sales summaries to our items. We see that when breaking up our items into sales groups we have a majority of items that are ongoing. These will most likely not be helpful when running our 7 questions based around limited sales. 
+
+ggplot(sales_summary, aes(x = sales_category)) +
+  geom_bar() +
+  geom_text(aes(label = after_stat(count)), stat = "count", vjust = 1.5, colour = "white")+
+  labs(title = "Count of Items in Sales Category",
+       x = "Category",
+       y = "Count")
+```
+
+
+## Sales Groups
+
+```{r Look at Differences in Sales by Group, message = FALSE, warning = FALSE}
+#Create plot of sales category with average weekly sales 
+
+sales_summary %>%
+filter(sales_category != "Ongoing") %>%
+ggplot( aes(x = avg_sales_per_week, y = sales_category, color = sales_category)) +
+  geom_point() +
+  labs(title = "Average Weekly Sales by Sales Category",
+       x = "Average Weekly Sales",
+       y = "Sales Category",
+       color = "Sales Category")
+
+# This plot shows us that in our short sale items we are highly weighted to the left with a few large outliers when creating our modeling sets we will want to do more outlier analysis on each group to see how to address each one. 
+
+
+```
+
+
+```{r Sales by Group From Launch Date, message = FALSE, warning = FALSE}
+
+df <- left_join(df,sales_summary %>% select(ITEM, sales_category, duration_days, duration_weeks, total_sale_days, first_date, launch13week_date, launch6month_date, launch1year_date), by = "ITEM")
+
+# Calculate days since launch
+
+df <- df %>%
+  mutate(days_since_launch = as.numeric(DATE - first_date),
+         weeks_since_launch = ceiling(as.numeric((DATE - first_date)/7)))
+
+# Group by sales category and create separate line graphs for each sales category
+
+df %>%
+  group_by(sales_category, weeks_since_launch) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  group_by(sales_category) %>%
+  filter(total_unit_sales > 0) %>%
+ggplot( aes(x = weeks_since_launch, y = total_unit_sales)) +
+  geom_line() +
+  labs(title = "Total Unit Sales by Weeks Since Launch",
+       x = "Weeks Since Launch",
+       y = "Total Unit Sales") +
+  facet_wrap(~ sales_category, scales = "free")
+```
+
+> COMMENT: In these 5 line graphs we are given the shape of sales from launch date. We see that with the short term products a large spike starts and tapers off as time goes on. "Ongoing" products tend to start strong and then slowly start to fall over time. This demenstrates further that when modeling breaking our items into categories to model will help us be more accurate when looking at forecasting newe products for shorter amounts of time. It also reinforces that we should be able to exclude our ongoing products from the data. 
+
+```{r Sales by Group During Time of Year, message = FALSE, warning = FALSE}
+
+# These graphs show us when forecasting for specific weeks of the year we will have large amounts of variance based on past sales. 
+# We may need to look at outliers in the 13 week and 1 year category. 
+
+# Group by sales category and create separate line graphs
+df %>%
+  mutate(week_of_year = week(DATE)) %>%
+  group_by(sales_category, week_of_year) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  group_by(sales_category) %>%
+  filter(total_unit_sales > 0) %>%
+ggplot(aes(x = week_of_year, y = total_unit_sales)) +
+  geom_line() +
+  labs(title = "Total Unit Sales by Week of the Year",
+       x = "Week of the Year",
+       y = "Total Unit Sales") +
+  facet_wrap(~ sales_category, scales = "free_y")
+```
+
+
+## Swire Directed Questions:
+
+### Question 1 Parameters
+
+>Item Description: Diet Smash Plum 11Small 4One
+>Caloric Segment: Diet
+>Market Category: SSD
+>Manufacturer: Swire-CC
+>Brand: Diet Smash
+>Package Type: 11Small 4One
+>Flavor: ‘Plum’
+>Which 13 weeks of the year would this product perform best in the market? What is the forecasted demand, in weeks, for those 13 weeks?
+
+```{r Q1 First Look, message = FALSE, warning = FALSE}
+library(stringr)
+# Matching parameters for Q1
+df %>%
+  filter(sales_category == "13 Week Sales", 
+         CALORIC_SEGMENT == 0, 
+         CATEGORY == "SSD") %>% 
+         #str_detect(ITEM, "PLUM")) %>%
+  group_by(ITEM) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+# There are 37 items that match time period caloric segment, category. flavor and packaging dont exist
+
+df %>%
+  filter(str_detect(ITEM, "PLUM")) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+#64 Plum Flavored items
+
+#Distribution of matching items
+df %>%
+  filter(sales_category == "13 Week Sales", 
+         CALORIC_SEGMENT == 0, 
+         CATEGORY == "SSD") %>%
+  group_by(ITEM, weeks_since_launch) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = weeks_since_launch, y = total_unit_sales)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Unit Sales by Week Since Launch",
+       x = "Week Since Launch",
+       y = "Total Unit Sales")
+
+# Create Sales Category distribution of plum items
+df %>%
+  filter(str_detect(ITEM, "PLUM")) %>%
+  group_by(sales_category) %>%
+  summarize(distinct_items = n_distinct(ITEM)) %>%
+  ggplot(aes(x = sales_category, y = distinct_items)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = distinct_items), vjust = -.5, color = "black") +
+  labs(title = "Count Distinct Items by Sales Category With Plum Flavor",
+       x = "Sales Category",
+       y = "Count of Distinct Items")
+  
+```
+
+>In this we found that there is a potential 37 itmes that have matching paramaters minus the flavor and packageing size. There are no itmes with the package size and 64 total plum flavored items. 
+
+### Question 2 Parameters
+
+>Item Description: Sparkling Jacceptabletlester Avocado 11Small MLT
+>Caloric Segment: Regular
+>Market Category: SSD
+>Manufacturer: Swire-CC
+>Brand: Sparkling Jacceptabletlester
+>SPARKLING JACCEPTABLETLESTER
+>Package Type: 11Small MLT
+>Flavor: ‘Avocado’
+>Swire plans to release this product 2 weeks prior to Easter and 2 weeks post Easter. What will the forecasted demand be, in weeks, for this product?
+
+
+```{r Q2 First Look, message = FALSE, warning = FALSE}
+
+# Matching parameters for Q2
+df %>%
+  filter(
+         month(first_date) %in% c(3, 4), 
+         CALORIC_SEGMENT == 1, 
+         CATEGORY == "SSD") %>% 
+         #str_detect(ITEM, "AVOCADO") %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+#148 items match launching in either March or April, regular and SSD category. There are non with Avocado in this group 
+
+df %>%
+  filter(str_detect(ITEM, "AVOCADO")) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+#340 AVOCADO Flavored items
+
+#Distribution of matching items
+
+df %>%
+  filter(
+         month(first_date) %in% c(3, 4), 
+         CALORIC_SEGMENT == 1, 
+         CATEGORY == "SSD",
+         sales_category != 'Ongoing') %>% 
+  group_by(ITEM, days_since_launch) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = days_since_launch, y = total_unit_sales)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Unit Sales from Launch Date of Q2 Matching Products",
+       x = "Days Since Launch",
+       y = "Total Unit Sales")
+
+# Create Sales Category distribution of AVACADO items
+
+df %>%
+  filter(str_detect(ITEM, "AVOCADO")) %>%
+  group_by(sales_category) %>%
+  summarize(distinct_items = n_distinct(ITEM)) %>%
+  ggplot(aes(x = sales_category, y = distinct_items)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = distinct_items), vjust = -.5, color = "black") +
+  labs(title = "Distinct Items by Sales Category with AVOCADO Flavor",
+       x = "Sales Category",
+       y = "Count of Distinct Items")
+  
+```
+
+> From this section we are able to find a group of 148 items that launched either in March or April that have some of the matching features of product 2. We also have a much larger group or products that have avocado with 340 itmes. 
+
+### Question 3 Parameters
+
+>Item Description: Diet Venomous Blast Energy Drink Kiwano 16 Liquid Small
+>Caloric Segment: Diet
+>Market Category: Energy
+>Manufacturer: Swire-CC
+>Brand: Venomous Blast
+>Package Type:  16 Liquid Small
+>Flavor: ’Kiwano’
+>Which 13 weeks of the year would this product perform best in the market? What is the forecasted demand, in weeks, for those 13 weeks?
+
+```{r Q3 First Look, message = FALSE, warning = FALSE}
+# Matching parameters for Q3
+
+df %>%
+  filter(
+    sales_category == "13 Week Sales", 
+    CALORIC_SEGMENT == 0, 
+    CATEGORY == "ENERGY",
+    #BRAND == "VENOMOUS BLAST",
+    #str_detect(ITEM, "KIWANO")
+  ) %>%
+  group_by(ITEM) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+# There are only 16  items that match time period caloric segment, category. flavor, packaging and brand dont exist
+
+df %>%
+  filter(str_detect(ITEM, "KIWANO")) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+#76 Kiwano Flavored items
+
+#Distribution of matching items
+
+df %>%
+  filter(sales_category == "13 Week Sales", 
+         CALORIC_SEGMENT == 0, 
+         CATEGORY == "ENERGY") %>%
+  group_by(ITEM, weeks_since_launch) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = weeks_since_launch, y = total_unit_sales)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Unit Sales by Week Since Launch",
+       x = "Week Since Launch",
+       y = "Total Unit Sales")
+
+# Create Sales Category distribution of Kiwano items
+
+df %>%
+  filter(str_detect(ITEM, "KIWANO")) %>%
+  group_by(sales_category) %>%
+  summarize(distinct_items = n_distinct(ITEM)) %>%
+  ggplot(aes(x = sales_category, y = distinct_items)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = distinct_items), vjust = -.5, color = "black") +
+  labs(title = "Count Distinct Items by Sales Category With Kiwano Flavor",
+       x = "Sales Category",
+       y = "Count of Distinct Items")
+  
+```
+
+> In this section we find that there is signficatnly less data around energy drinks that match our category. Overall there is 76 current historical KIWANO flavored items with only 3 of those being sold for more than one day but less than 13 weeks. 
+
+### Question 4 Parameters
+
+>Item Description: Diet Square Mulberries Sparkling Water 10Small MLT
+>Caloric Segment: Diet
+>Market Category: Sparkling Water
+>Manufacturer: Swire-CC
+>Brand: Square
+>Package Type: 10Small MLT
+>Flavor: Mulberries
+>Swire plans to release this product for the duration of 1 year but only in the Northern region. What will the forecasted demand be, in weeks, for this product?
+ 
+```{r Q4 First Look, message = FALSE, warning = FALSE}
+# Matching parameters for Q4
+
+df %>%
+  filter(
+         sales_category == "1 Year Sales", 
+         CALORIC_SEGMENT == 0, 
+         CATEGORY == "SPARKLING WATER") %>%
+         #str_detect(ITEM, "MULBERRIES")) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+#34 items match 1 year launch sales, diet and Sparkling Water category. There are non with Mulberries in this group 
+
+df %>%
+  filter(str_detect(ITEM, "MULBERRIES")) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+#26 Mulberries Flavored items
+
+#Distribution of matching items
+
+df %>%
+  filter(
+         sales_category == "1 Year Sales", 
+         CALORIC_SEGMENT == 0, 
+         CATEGORY == "SPARKLING WATER",
+         sales_category != 'Ongoing') %>% 
+  group_by(ITEM, days_since_launch) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = days_since_launch, y = total_unit_sales)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Unit Sales from Launch Date of Q4 Matching Products",
+       x = "Days Since Launch",
+       y = "Total Unit Sales")
+
+# Create Sales Category distribution of Mulberries items
+
+df %>%
+  filter(str_detect(ITEM, "MULBERRIES")) %>%
+  group_by(sales_category) %>%
+  summarize(distinct_items = n_distinct(ITEM)) %>%
+  ggplot(aes(x = sales_category, y = distinct_items)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = distinct_items), vjust = -.5, color = "black") +
+  labs(title = "Distinct Items by Sales Category with Mulberry Flavor",
+       x = "Sales Category",
+       y = "Count of Distinct Items")
+```
+
+> In this section as with the energy drinks, we find there is much less data around sparkling water with only 34 items matching category, segment and sales category. We will need to add in demographic data for just sales in the northern region when setting up modeling. Also, of interest there currently has been no Mulberry products placed on the market for only 1 year. 
+
+### Question 5 Parameters
+ 
+>Item Description: Greetingle Health Beverage Woodsy Yellow .5L 12One Jug
+>Caloric Segment: Regular
+>Market Category: ING Enhanced Water
+>Manufacturer: Swire-CC
+>Brand: Greetingle 
+>Package Type: .5L 12One Jug
+>Flavor: ‘Woodsy Yellow’ 
+>Swire plans to release this product for 13 weeks, but only in one region. Which region would it perform best in? 
+
+```{r Q5 First Look, message = FALSE, warning = FALSE}
+# Matching parameters for Q5
+
+df %>%
+  filter(
+    #sales_category == "13 Week Sales", 
+    CALORIC_SEGMENT == 1, 
+    CATEGORY == "ING ENHANCED WATER",
+    #BRAND == "GREETINGLE",
+    #str_detect(ITEM, "WOODSY YELLOW")
+  ) %>%
+  group_by(ITEM) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+# There are only 55 items that match Caloric Segment and Category. This one the sales cateogry also does not have matches. 
+
+df %>%
+  filter(str_detect(ITEM, "WOODSY YELLOW")) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+#0 Flavored items
+
+#Distribution of matching items
+
+df %>%
+  filter(#sales_category == "13 Week Sales", 
+         CALORIC_SEGMENT == 1, 
+         CATEGORY == "ING ENHANCED WATER") %>%
+  group_by(ITEM, weeks_since_launch) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = weeks_since_launch, y = total_unit_sales)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Unit Sales by Week Since Launch",
+       x = "Week Since Launch",
+       y = "Total Unit Sales")
+
+```
+
+> This product proved to be the least common to our current data. The enhanced water segement is very small and has not had any limited releases like this before. Also there has been no sales of this flavor in the past. This will be one where our estimate will have many larget assumptions especially once we bring in the Demographic of only selling in one region. 
+
+### Question 6 Parameters
+
+>Item Description: Diet Energy Moonlit Casava 2L Multi Jug
+>Caloric Segment: Diet
+>Market Category: Energy
+>Manufacturer: Swire-CC
+>Brand: Diet Moonlit
+>Package Type: 2L Multi Jug
+>Flavor: ‘Cassava’
+>Swire plans to release this product for 6 months. What will the forecasted demand be, in weeks, for this product?
+
+
+```{r Q6 First Look, message = FALSE, warning = FALSE}
+# Matching parameters for Q6
+df %>%
+  filter(
+         sales_category == "6 Month Sales", 
+         CALORIC_SEGMENT == 0, 
+         CATEGORY == "ENERGY"
+         #str_detect(ITEM, "CASSAVA")
+         ) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+#10 items match 6 Month launch sales, diet and Energy category. There are non with Cassava in this group 
+
+df %>%
+  filter(str_detect(ITEM, "CASSAVA")) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+# 0 Cassava Flavored items
+
+#Distribution of matching items
+
+df %>%
+  filter(
+         sales_category == "6 Month Sales", 
+         CALORIC_SEGMENT == 0, 
+         CATEGORY == "ENERGY",
+         sales_category != 'Ongoing') %>% 
+  group_by(ITEM, days_since_launch) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = days_since_launch, y = total_unit_sales)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Unit Sales from Launch Date of Q6 Matching Products",
+       x = "Days Since Launch",
+       y = "Total Unit Sales")
+
+
+# Distribution of Sales by month of the year
+
+df %>%
+  filter(
+         sales_category == "6 Month Sales", 
+         CALORIC_SEGMENT == 0, 
+         CATEGORY == "ENERGY",
+         sales_category != 'Ongoing') %>% 
+  group_by(ITEM, MONTH) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = MONTH, y = total_unit_sales)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Unit Sales of 6 Month Sales by Month of the Year",
+       x = "MONTH",
+       y = "Total Unit Sales")
+
+
+```
+
+> This product grouping as with the last will need to be built on many assuptions. There currently is no other products with CASSAVA in the market. There are 10 itmes that have been sold for 6 months at a time that are in the energy drink category. For this we will need to expand out our data set to hone in on which 6 months of the year would be best. In a graph of sales we do see a window of time that these matching products have sold the most, Feb - July. 
+
+### Question 7 Parameters
+
+>Item Description: Peppy Gentle Drink Pink Woodsy .5L Multi Jug
+>Caloric Segment: Regular
+>Type: SSD
+>Manufacturer: Swire-CC
+>Brand: Peppy
+>Package Type: .5L Multi Jug
+>Flavor: ‘Pink Woodsy’
+>Swire plans to release this product in the Southern region for 13 weeks. What will the forecasted demand be, in weeks, for this product?
+
+```{r Q7 First Look, message = FALSE, warning = FALSE}
+# Matching parameters for Q3
+
+df %>%
+  filter(
+    sales_category == "13 Week Sales", 
+    CALORIC_SEGMENT == 1, 
+    CATEGORY == "SSD",
+    #BRAND == "PEPPY",
+    #str_detect(ITEM, "PINK WOODSY")
+  ) %>%
+  group_by(ITEM) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+# There are 62 items that match time period caloric segment, category. flavor, packaging and brand combination do not exist
+
+df %>%
+  filter(str_detect(ITEM, "PINK WOODSY")) %>%
+  summarize(distinct_items = n_distinct(ITEM))
+
+#0 items have Pink Woodsy Flavored items
+
+#Distribution of matching items
+
+df %>%
+  filter(sales_category == "13 Week Sales", 
+         CALORIC_SEGMENT == 1, 
+         CATEGORY == "SSD") %>%
+  group_by(ITEM, weeks_since_launch) %>%
+  summarize(total_unit_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = weeks_since_launch, y = total_unit_sales)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Unit Sales by Week Since Launch",
+       x = "Week Since Launch",
+       y = "Total Unit Sales"
+  )
+
+```
+
+> This product does have more compariable data since it is in the SSD category. We should be able to create a good data set once linked with the region data around a 13 week forecast. The distribution of the 13 week sales products in the SSD category follows the general distribution with large sales in week 0 and 1 very small sales in the middle and a bump in the final weeks. 
+
+
+```{r}
+rm(categories_count)
+rm(sales_summary)
+rm(df)
+```
+
+
+# EDA - PART 4: DEMOGRAPHIC DATA  
+
+
+## Quick View of the Demographic Data
+
+```{r include=FALSE}
+
+demo_data <- read.csv("final_market_demographics_wide_use_me.csv")
+demo_data$Zip <- as.character(demo_data$Zip)
+demo_data$MARKET_KEY <- as.character(demo_data$MARKET_KEY)
+demo_data <- demo_data %>%
+  rename(HH_Size_5 = `HH_Size_5.`)
+demo_data <- demo_data %>%
+  rename(Age_Males_18_24 = `Age_Males_18.24`)
+
+skim(demo_data)
+
+```
+
+```{r results='asis', echo=FALSE}
+
+# Summary statistics by state with ordering by 'Total Market Pop'
+summary_stats_by_state <- demo_data %>%
+  group_by(State) %>%
+  summarise(
+    `Total Market Pop` = sum(TOTAL_POP_COUNT),
+    `Household Count` = sum(TOTAL_HOUSEHOLD_COUNT),
+    `# of Market Segments` = n_distinct(MARKET_KEY),
+    `# of Zip Codes` = n_distinct(Zip),
+    `# of Adult Males` = sum(Total_Males_Count),
+    `# of Adult Females` = sum(Total_Count_Females)
+  ) %>%
+  ungroup() %>%
+  arrange(desc(`Total Market Pop`)) # Order by 'Total Market Pop' in descending order
+
+# Calculate the total summary as before
+total_summary <- summarise(demo_data,
+  `Total Market Pop` = sum(TOTAL_POP_COUNT),
+  `Household Count` = sum(TOTAL_HOUSEHOLD_COUNT),
+  `# of Market Segments` = n_distinct(MARKET_KEY),
+  `# of Zip Codes` = n_distinct(Zip),
+  `# of Adult Males` = sum(Total_Males_Count),
+  `# of Adult Females` = sum(Total_Count_Females)
+)
+
+# Add a "State" column to the total summary for consistency
+total_summary <- total_summary %>%
+  mutate(State = "Total")
+
+# Combine and format numbers with commas
+final_summary_stats <- bind_rows(summary_stats_by_state, total_summary) %>%
+  mutate(across(where(is.numeric), ~format(.x, big.mark = ",")))
+
+
+```
+
+
+### Summary Statistics
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+```{r summary-table, echo=FALSE, results='asis', warning=FALSE}
+
+# Use kable to create and style the table
+kable(final_summary_stats, format = "html", escape = FALSE, align = 'c', row.names = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F) %>%
+  # Apply conditional coloring: only the last row (Total) is dark red
+  row_spec(nrow(final_summary_stats), bold = TRUE, color = "darkred", background = "#F5F5F5") %>%
+  # Apply gray color to all other rows
+  column_spec(1:ncol(final_summary_stats), color = "gray")
+
+```
+
+### Regional Market Map (Zip Codes)
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+<div style="text-align: center; padding: 20px;">
+  <img src="Map.png" alt="MAP" width="800" height="600" style="object-fit: contain;">
+</div>
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+### Demographics Drill Down
+
+
+```{r include=FALSE}
+
+# Calculate averages for each income segment
+averages <- demo_data %>%
+  summarise(
+    `<10K` = mean(HHI_Under_.10.000, na.rm = TRUE),
+    `10K>20K` = mean(HHI_.10.000_.19.999, na.rm = TRUE),
+    `20K>30K` = mean(HHI_.20.000_.29.999, na.rm = TRUE),
+    `30K>40K` = mean(HHI_.30.000_.39.999, na.rm = TRUE),
+    `40K>50K` = mean(HHI_.40.000_.49.999, na.rm = TRUE),
+    `50K>75K` = mean(HHI_.50.000_.74.999, na.rm = TRUE),
+    `75K>100K` = mean(HHI_.75.000_.99.999, na.rm = TRUE),
+    `100K>150K` = mean(HHI_.100.000_.149.999, na.rm = TRUE),
+    `150K+` = mean(HHI_.150.000., na.rm = TRUE)
+  ) %>%
+  pivot_longer(cols = everything(), names_to = "HHI_Range", values_to = "Average") %>%
+  mutate(HHI_Range = sub(" Avg", "", HHI_Range))
+
+```
+
+
+```{r include=FALSE}
+# Calculate total counts for each income segment
+total_counts <- demo_data %>%
+  summarise(
+    `<10K` = sum(HHI_Under_.10.000, na.rm = TRUE),
+    `10K>20K` = sum(HHI_.10.000_.19.999, na.rm = TRUE),
+    `20K>30K` = sum(HHI_.20.000_.29.999, na.rm = TRUE),
+    `30K>40K` = sum(HHI_.30.000_.39.999, na.rm = TRUE),
+    `40K>50K` = sum(HHI_.40.000_.49.999, na.rm = TRUE),
+    `50K>75K` = sum(HHI_.50.000_.74.999, na.rm = TRUE),
+    `75K>100K` = sum(HHI_.75.000_.99.999, na.rm = TRUE),
+    `100K>150K` = sum(HHI_.100.000_.149.999, na.rm = TRUE),
+    `150K+` = sum(HHI_.150.000., na.rm = TRUE)
+  ) %>%
+  pivot_longer(cols = everything(), names_to = "HHI_Range", values_to = "Total_Count")
+
+
+```
+
+```{r echo=FALSE}
+# Plot for averages
+plot_averages <- ggplot(averages, aes(x = fct_reorder(HHI_Range, Average), y = Average, fill = Average)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightgray", high = "darkred") +
+  theme_minimal() +
+  theme(text = element_text(color = "darkgray"), axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Household Income Range", y = "Average", title = "Mean Household Income Range (Zip Code)")
+
+# Plot for total counts
+plot_total_counts <- ggplot(total_counts, aes(x = fct_reorder(HHI_Range, Total_Count), y = Total_Count, fill = Total_Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightgray", high = "darkred") +
+  theme_minimal() +
+  theme(text = element_text(color = "darkgray"), axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Household Income Range", y = "Total Count", title = "Household Income Count by Range (Zip Code)")
+
+# Combine the plots horizontally
+# Adjusting the layout to emphasize width
+combined_plots <- plot_averages + plot_total_counts + 
+  plot_layout(ncol = 2, widths = c(1.5, 1.5))
+
+
+```
+
+```{r combined_plots_chunk, fig.width=10, fig.height=5}
+#The data collected on household income is poorly distributed. 
+#Makes it appear that most people are wealthy, in the 150K+ group.
+#We will consider combining household income groups into 50K segments to capture a more realistic distribution.
+combined_plots #aggregated by Household Income (averages and counts)
+
+
+```
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+```{r include=FALSE}
+
+# Assuming your dataframe is named demo_data
+# Reshape the data into long format
+long_data <- demo_data %>%
+  summarise(
+    `1 Person Household` = sum(HH_Size_1, na.rm = TRUE),
+    `2 Person Household` = sum(HH_Size_2, na.rm = TRUE),
+    `3 Person Household` = sum(HH_Size_3, na.rm = TRUE),
+    `4 Person Household` = sum(HH_Size_4, na.rm = TRUE),
+    `5+ Person Household` = sum(HH_Size_5, na.rm = TRUE)
+  ) %>%
+  pivot_longer(cols = everything(), names_to = "Household Size", values_to = "Count")
+
+# View the prepared data (optional)
+#print(long_data)
+
+```
+
+```{r echo=FALSE}
+
+racial_data <- demo_data %>%
+  summarise(
+    `White, Non-Hispanic` = sum(Race_White_Non.Hisp_Adlts, na.rm = TRUE),
+    `Black, Non-Hispanic` = sum(Race_Black_Non.Hisp_Aldts, na.rm = TRUE),
+    `Hispanic Americans` = sum(Race_Hisp_Adlts, na.rm = TRUE),
+    `Asian Americans` = sum(Race_Asian_Non.Hisp_Adlts, na.rm = TRUE),
+    `Other Race` = sum(Race_Other_Non.Hisp_Adlts, na.rm = TRUE)
+  ) %>%
+  pivot_longer(cols = everything(), names_to = "Race", values_to = "Count") %>%
+  mutate(Total = sum(Count)) %>%
+  mutate(Percent = Count / Total * 100) %>%
+  select(-Total) # Remove the Total column, keeping only Race, Count, and Percent
+
+# View the prepared data (optional)
+# print(racial_data)
+
+
+```
+
+```{r echo=FALSE}
+# Enhanced pie chart for racial data with title color set to medium gray
+racial_pie_chart <- ggplot(racial_data, aes(x = "", y = Count, fill = Race)) +
+  geom_bar(width = 1, stat = "identity", color = "white") +
+  coord_polar(theta = "y") + 
+  scale_fill_manual(values = c("#FFCCCC", "#FF9999", "#FF6666", "#CC0000", "#800000")) +
+  theme_minimal() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid = element_blank(),
+        legend.title = element_blank(),
+        plot.title = element_text(color = "#6E6E6E")) +  # Set title color to medium gray
+  labs(title = "Racial Composition (Entire Dataset)",
+       fill = "Race Category") +
+  geom_text(aes(label = scales::percent(Count / sum(Count), accuracy = 1)), position = position_stack(vjust = 0.5))
+
+```
+
+
+```{r echo=FALSE}
+# Enhanced pie chart with title color set to medium gray
+HH_Size <- ggplot(long_data, aes(x = "", y = Count, fill = `Household Size`)) +
+  geom_bar(width = 1, stat = "identity", color = "white") +
+  coord_polar(theta = "y") + 
+  scale_fill_manual(values = c("#FFCCCC", "#FF9999", "#FF6666", "#CC0000", "#800000")) +
+  theme_minimal() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid = element_blank(),
+        legend.title = element_blank(),
+        plot.title = element_text(color = "#6E6E6E")) +  # Set title color to medium gray
+  labs(title = "# of Persons per Household (Entire Dataset)",
+       fill = "Household Size") +
+  geom_text(aes(label = scales::percent(Count / sum(Count))), position = position_stack(vjust = 0.5))
+
+# Combine the two pie charts into one output
+combined_pie_charts <- HH_Size + racial_pie_chart + plot_layout(ncol = 2)
+
+```
+
+
+
+
+```{r fig.width=12, fig.height=6}
+
+combined_pie_charts
+
+```
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+```{r warning=FALSE, echo=FALSE}
+
+
+# Preparing the data with proper aliases and summarizing counts
+lifestyle_counts <- demo_data %>%
+  summarise(
+    `Wealthy Urban` = sum(LS_Wealthy_Urban, na.rm = TRUE),
+    `Wealthy Sprawling Cities Suburbs` = sum(LS_Wealthy_Sprawling_Cities_Suburbs, na.rm = TRUE),
+    `Wealthy Countrysides` = sum(LS_Wealthy_Countrysides, na.rm = TRUE),
+    `Affluent Urban` = sum(LS_Affluent_Urban, na.rm = TRUE),
+    `Affluent Sprawling Cities Suburbs` = sum(LS_Affluent_Sprawling_Cities_Suburbs, na.rm = TRUE),
+    `Affluent Countrysides` = sum(LS_Affluent_Countrysides, na.rm = TRUE),
+    `Upper Middle Urban` = sum(LS_Upper_Middle_Urban, na.rm = TRUE),
+    `Upper Middle Sprawling Cities Suburbs` = sum(LS_Upper_Middle_Sprawling_Cities_Suburbs, na.rm = TRUE),
+    `Upper Middle Countrysides` = sum(LS_Upper_Middle_Countrysides, na.rm = TRUE),
+    `Lower Middle Urban` = sum(LS_Lower_Middle_Urban, na.rm = TRUE),
+    `Lower Middle Sprawling Cities Suburbs` = sum(LS_Lower_Middle_Sprawling_Cities_Suburbs, na.rm = TRUE),
+    `Lower Middle Countrysides` = sum(LS_Lower_Middle_Countrysides, na.rm = TRUE),
+    `Striving Urban` = sum(LS_Striving_Urban, na.rm = TRUE),
+    `Striving Sprawling Cities Suburbs` = sum(LS_Striving_Sprawling_Cities_Suburbs, na.rm = TRUE),
+    `Striving Countrysides` = sum(LS_Striving_Countrysides, na.rm = TRUE),
+    `Downscale Urban` = sum(LS_Downscale_Urban, na.rm = TRUE),
+    `Downscale Sprawling Cities Suburbs` = sum(LS_Downscale_Sprawling_Cities_Suburbs, na.rm = TRUE),
+    `Downscale Countrysides` = sum(LS_Downscale_Countrysides, na.rm = TRUE)
+  ) %>%
+  pivot_longer(everything(), names_to = "Lifestyle", values_to = "Count") %>%
+  mutate(Lifestyle = reorder(Lifestyle, Count, FUN = function(x)-sum(x))) # Order by count
+
+# Assuming lifestyle_counts is already prepared as shown previously
+total_people <- sum(lifestyle_counts$Count)  # Calculate the total number of people across all categories
+
+# Calculate the percentage for each category
+lifestyle_counts <- lifestyle_counts %>%
+  mutate(Percentage = Count / total_people * 100)
+
+
+# Generating the bar plot with percentage data labels
+lifestyle_plot <- ggplot(lifestyle_counts, aes(x = Lifestyle, y = Count, fill = "darkred")) +
+  geom_bar(stat = "identity", color = "darkred", fill = "darkred", show.legend = FALSE) +
+  coord_flip() + # Horizontal bars
+  scale_y_continuous(labels = scales::comma) + # Use commas for thousands
+  labs(title = "Lifestyle Demographic Data", x = "", y = "Population Count") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(color = "#6E6E6E"),
+    axis.title = element_text(color = "#6E6E6E"),
+    plot.title = element_text(color = "#6E6E6E", size = 16)
+  ) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage), y = Count + 0.02 * max(Count)), color = "#6E6E6E", hjust = 0)
+
+
+
+
+
+```
+
+```{r fig.width=12, fig.height=6}
+
+# The Lifestyle plot gives us an idea of how the population is spread amongst the various Zip codes that belong to all of the Swire (& Competitors) market areas. More than half of all consumers live in the suburban sprawl. As a reminder the total number of adults included in the market area was 24,578,188.
+lifestyle_plot
+
+```
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+```{r echo=FALSE}
+
+# Example of creating a summarized dataframe with age groups for males
+age_groups_males <- demo_data %>%
+  summarise(
+    `Males 18-24` = sum(Age_Males_18_24, na.rm = TRUE),
+    `Males 25-34` = sum(Age_Males_25_34, na.rm = TRUE),
+    `Males 35-44` = sum(Age_Males_35_44, na.rm = TRUE),
+    `Males 45-54` = sum(Age_Males_45_54, na.rm = TRUE),
+    `Males 55-64` = sum(Age_Males_55_64, na.rm = TRUE),
+    `Males 65-74` = sum(Age_Males_65_74, na.rm = TRUE),
+    `Males 75+` = sum(Age_Males_75., na.rm = TRUE)
+  ) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "AgeGroup",
+    values_to = "Count"
+  )
+
+# Ensure AgeGroup is a factor if needed (optional, based on your subsequent usage)
+age_groups_males$AgeGroup <- factor(age_groups_males$AgeGroup)
+
+# Check the resulting dataframe
+#print(age_groups)
+
+#str(age_groups_males)
+```
+
+```{r include=FALSE}
+
+# Summarizing data for female age groups
+age_groups_females <- demo_data %>%
+  summarise(
+    `Females 18-24` = sum(Age_Females_18_24, na.rm = TRUE),
+    `Females 25-34` = sum(Age_Females_25_34, na.rm = TRUE),
+    `Females 35-44` = sum(Age_Females_35_44, na.rm = TRUE),
+    `Females 45-54` = sum(Age_Females_45_54, na.rm = TRUE),
+    `Females 55-64` = sum(Age_Females_55_64, na.rm = TRUE),
+    `Females 65-74` = sum(Age_Females_65_74, na.rm = TRUE),
+    `Females 75+` = sum(Age_Females_75., na.rm = TRUE)
+  ) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "AgeGroup",
+    values_to = "Count"
+  )
+
+# Check the resulting dataframe
+#print(age_groups_females)
+#str(age_groups_females)
+```
+
+```{r include=FALSE}
+
+# Assuming age_groups_males and age_groups_females are already defined
+# First, standardize the AgeGroup column in both dataframes
+
+age_groups_males <- age_groups_males %>%
+  mutate(AgeGroup = sub("Males ", "", as.character(AgeGroup)), # Remove "Males " prefix
+         Gender = "Male") # Add Gender column
+
+age_groups_females <- age_groups_females %>%
+  mutate(AgeGroup = sub("Females ", "", AgeGroup), # Remove "Females " prefix
+         Gender = "Female") # Add Gender column
+
+# Now combine both dataframes
+combined_age_groups <- bind_rows(age_groups_males, age_groups_females)
+
+# Convert AgeGroup back to a factor if needed
+combined_age_groups$AgeGroup <- factor(combined_age_groups$AgeGroup,
+                                       levels = c("18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75+"))
+
+# Inspect the combined dataframe
+#print(combined_age_groups)
+
+```
+
+
+```{r include=FALSE}
+
+age_group_plot <- ggplot(combined_age_groups, aes(x = AgeGroup, y = Count, fill = Gender)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  scale_fill_manual(values = c("Male" = "darkgrey", "Female" = "darkred")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Age Segment", y = "Count", title = "Age Segment Distribution by Gender")
+```
+
+```{r fig.width=8, fig.height=6}
+# Typical Men - more in the earlier years, dying off by middle age faster than women. 
+age_group_plot
+```
+
+<hr style="height: 1px; background-color: #C0392B; border: none;">
+
+
+
+
