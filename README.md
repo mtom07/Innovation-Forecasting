@@ -1,5 +1,5 @@
 # Swire Innovation Product Forecasting
-This repository showcases individual and group work completed to address a business problem presented to our MSBA Capstone Group.
+This repository showcases individual and group work completed to address a business problem presented to our MSBA Capstone Group at the University of Utah.
 
 # Business Problem and Project Goal
 Swire Coca-Cola is a leader in the beverage distribution industry based out of Salt Lake City. Swire distributes many different beverages across regions in the western half the of the United States. In their product portfolio they often do short term releases of “Innovation” products. These products are crucial for maintaining customer interest, driving demand, and staying ahead of the competition, but they also pose risks of overproduction or underestimating demand. We are tasked with creating a method to accurately forecast demand of 7 upcoming innovation products, that will be distributed in various regions and for various amounts of time.
