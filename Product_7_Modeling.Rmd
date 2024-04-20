@@ -1,0 +1,435 @@
+---
+title: "Modeling Product #7"
+author: "Michael Tom"
+date:  "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    css: custom-styles.css
+    theme: null
+    highlight: null
+    toc: true
+    toc_float: false
+---
+# Set up 
+
+```{r setup, include=FALSE}
+if (!require("pacman")) install.packages("pacman")
+
+# Use pacman to load (and install if necessary) the specific packages you requested
+pacman::p_load(dplyr, ggplot2, tidyverse, tidytext, skimr, readr, tidyr, lubridate, stringr, knitr, kableExtra, tidymodels, pROC, xgboost, doParallel, vip, DALEXtra)
+#have to manually load 'caret' for some reason
+
+```
+
+## Taking a sample of the whole dataset
+
+```{r}
+df <- readRDS("swire_no_nas.rds")  #inject the data and we will sub-sample
+
+```
+
+```{r}
+
+regions_joinme <- read.csv("states_summary.csv")
+
+unique(regions_joinme$REGION)
+# "NORTHERN"    "DESERT_SW"   "PRAIRIE"     "CALI_NEVADA"  "MOUNTAIN"    "SOCAL"   "ARIZONA"    "NEWMEXICO"   "NOCAL"    "COLORADO"    "KANSAS" 
+
+str(regions_joinme)
+# Perform a left join using the merge() function
+df <- merge(df, regions_joinme[, c("MARKET_KEY", "REGION")], by = "MARKET_KEY", all.x = TRUE)
+rm(regions_joinme)
+
+```
+
+### Quick imputations 
+
+```{r}
+# Update CALORIC_SEGMENT values: 0 if 'DIET/LIGHT', otherwise 1
+df$CALORIC_SEGMENT <- ifelse(df$CALORIC_SEGMENT == "DIET/LIGHT", 0, 1)
+df$MARKET_KEY <- as.character(df$MARKET_KEY)
+df <- df %>%
+  mutate(
+    MONTH = as.numeric(substr(DATE, 6, 7)),  # Extract the month from YYYY-MM-DD format
+    SEASON = case_when(
+      MONTH %in% c(12, 01, 02) ~ "WINTER",
+      MONTH %in% c(03, 04, 05) ~ "SPRING",
+      MONTH %in% c(06, 07, 08) ~ "SUMMER",
+      MONTH %in% c(09, 10, 11) ~ "FALL",
+      TRUE ~ NA_character_  # This is just in case there are any undefined values
+    )
+  )
+
+
+
+
+```
+
+```{r}
+str(df)
+```
+
+## Making a 10% sample of the data to shrink it 
+
+```{r}
+# Assuming df is your dataframe
+set.seed(123) # Set a random seed for reproducibility
+sampled_df <- df[sample(1:nrow(df), 2446143), ]
+rm(df)
+```
+
+```{r}
+df <- sampled_df
+rm(sampled_df)
+```
+
+```{r}
+#skim(df)
+```
+
+```{r}
+summary(df)
+```
+### Linear model on sampled data looks the same largely 
+
+```{r}
+# Perform a linear regression with UNIT_SALES as the dependent variable
+# and PRICE (or your chosen variable) as the independent variable
+linear_model <- lm(DOLLAR_SALES ~ UNIT_SALES, data = df)
+
+# Print the summary of the linear model to see the results
+summary(linear_model)
+
+```
+
+
+```{r fig.width=10, fig.height=10}
+# Create a scatter plot with the regression line, colored by MANUFACTURER
+ggplot(df, aes(x = UNIT_SALES, y = DOLLAR_SALES, color = MANUFACTURER)) +
+  geom_point(alpha = 0.5) +  # Adjust alpha to avoid overplotting, if necessary
+  geom_smooth(method = "lm", color = "black", se = FALSE) +  # Add linear regression line without confidence band for clarity
+  labs(title = "Linear Model of UNIT_SALES vs. DOLLAR_SALES by MANUFACTURER",
+       x = "UNIT SALES",
+       y = "DOLLAR SALES") +
+  theme_minimal() +
+  theme(legend.position = "bottom")  # Adjust legend position if needed
+
+```
+
+```{r}
+# create a table of total values by brand
+brand_summary <- df %>%
+  group_by(BRAND) %>%
+  summarise(
+    total_units_sold = sum(UNIT_SALES),
+    total_revenue = sum(DOLLAR_SALES),
+    avg_price = total_revenue / total_units_sold,
+    total_days_sold = n() # Count the number of rows for each brand
+  ) %>%
+  arrange(desc(total_units_sold)) %>%  # Order by revenue in descending order
+  mutate(rank = row_number()) 
+
+summary(brand_summary)
+print(brand_summary[brand_summary$BRAND == "PEPPY", ])
+
+```
+>Peppy is a hugly popular brand coming in at 3rd in total revenue and 3rd in total units sold
+
+## Take a look at your brand..
+
+```{r fig.height=10, fig.width=10}
+
+# Filter the dataframe for only 'PEPPY'
+filtered_df <- df %>% 
+  filter(BRAND == "PEPPY")
+           
+
+summary(filtered_df)
+
+# Create the plot
+ggplot(filtered_df, aes(x = UNIT_SALES, y = DOLLAR_SALES)) +
+  geom_point(color = "red", alpha = 1) +  # Bright red points with full opacity
+  geom_smooth(method = "lm", color = "black", se = FALSE) +  # Add linear regression line without confidence band
+  labs(title = "Linear Model of UNIT_SALES vs. DOLLAR_SALES for PEPPY",
+       x = "UNIT SALES",
+       y = "DOLLAR SALES") +
+  theme_minimal() +
+  theme(legend.position = "none")  
+```
+>PEPPY only has multiple sizes of their one drink "GENTLE DRINK RED PEPPER COLA"
+
+```{r}
+# Check Tenure of all items
+filtered_df %>%
+  mutate(DATE = as.Date(DATE)) %>%
+    group_by(ITEM) %>%
+  summarize(Date_Difference = difftime(max(DATE), min(DATE), units = "weeks"),
+            Total_Unit_Sales = sum(UNIT_SALES)) %>%
+  arrange(Date_Difference)
+```
+> Peppy only has 2 products that could be considered innovation products, but they each were only sold once and each only sold 1 unit. 
+
+```{r}
+#check for Pink woodsy flavor sales
+sales_by_pink_woodsy <- df %>%
+  filter(str_detect(ITEM, "PINK") & str_detect(ITEM, "WOODSY"))
+```
+>there are no current sales around pink woodsy flavored data. 
+
+```{r}
+#check for packaging
+df %>%
+  filter(CATEGORY == "SSD",
+         CALORIC_SEGMENT == 1,
+         str_detect(PACKAGE, "JUG") & str_detect(PACKAGE, "\\.5L") & str_detect(PACKAGE, "MULTI")) %>%
+  mutate(PACKAGE = as.factor(PACKAGE))
+```
+>there is currently no sales of .5LJUG
+
+## Sales by Week of the year
+
+```{r}
+filtered_df %>%
+  mutate(DATE = as.Date(DATE)) %>%
+  mutate(WEEK = as.integer(format(DATE, "%U"))) %>%
+  group_by(WEEK) %>%
+  summarise(total_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = WEEK, y = total_sales)) +
+  geom_line(color = "black") +  # Blue line connecting points
+  labs(title = "Total Sales by Week of the Year",
+       x = "Week of the Year",
+       y = "Total Unit Sales") +
+  theme_minimal()
+```
+
+```{r}
+#find the best 13 weeks
+library(zoo)
+# Calculate total sales for each group of 13 consecutive weeks
+sales_by_group <- filtered_df %>%
+  mutate(DATE = as.Date(DATE)) %>%
+  mutate(WEEK = as.integer(format(DATE, "%U"))) %>%
+  group_by(WEEK) %>%
+  summarise(total_sales = sum(UNIT_SALES)) %>%
+  mutate(sales_in_group = rollsum(total_sales, 13, align = "left", fill = NA)) %>%
+  mutate(week_label = paste0("Week ", WEEK + 1, " to Week ", WEEK + 13)) %>%
+  arrange(WEEK) %>%  # Order by WEEK
+  filter(!is.na(sales_in_group))  # Remove rows with sales_in_group = NA
+
+# Plot the bar chart
+sales_by_group$week_label <- factor(sales_by_group$week_label, levels = sales_by_group$week_label[order(sales_by_group$WEEK)])
+ggplot(sales_by_group, aes(x = factor(week_label), y = sales_in_group)) +
+  geom_bar(stat = "identity", fill = "black") +
+  labs(title = "Total Sales for Each 13-Week Grouping",
+       x = "Weeks (Starting from Week 1)",
+       y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+```
+
+> From this graph we see that weeks 21 to 34 historically have the highest unit sales of PEPPY
+
+## Made a new smaller "innovation" data fram
+
+```{r}
+innovation <- df %>%
+  filter(CATEGORY == "SSD",
+         CALORIC_SEGMENT == 1,
+         str_detect(ITEM, "PINK") | str_detect(ITEM, "WOODSY"))
+
+print(unique(innovation$ITEM))
+#there are 60 items with SSD, Regular, and PINT OR WOODSY, but none of them are from PEPPY. 
+
+#Add a month Date factor
+library(dplyr)
+library(lubridate)
+
+innovation <- innovation %>%
+  mutate(
+    MONTH = month(ymd(DATE)),  # Extract month using lubridate's ymd function
+    MONTH = as.factor(MONTH)   # Convert the extracted month into a factor
+  )
+
+str(innovation)
+```
+
+```{r}
+# Assuming 'innovation' is your data frame
+model <- lm(DOLLAR_SALES ~ UNIT_SALES + CALORIC_SEGMENT + PACKAGE + SEASON + REGION, data = innovation)
+summary(model)
+
+```
+
+>This model returned an R2 of .7225, which is one of the lowest of our innovation products. The strongest predictors are the differnt sized items and where they are selling.  
+
+### More exploration
+
+```{r}
+library(dplyr)
+
+small_group <- df %>%
+  filter(UNIT_SALES < 76000, DOLLAR_SALES < 500000)
+
+skim(small_group)
+```
+
+```{r fig.width=10, fig.height=10}
+# Create a scatter plot with the regression line, colored by MANUFACTURER
+ggplot(small_group, aes(x = UNIT_SALES, y = DOLLAR_SALES, color = MANUFACTURER)) +
+  geom_point(alpha = 0.5) +  # Adjust alpha to avoid overplotting, if necessary
+  geom_smooth(method = "lm", color = "black", se = FALSE) +  # Add linear regression line without confidence band for clarity
+  labs(title = "Linear Model of UNIT_SALES vs. DOLLAR_SALES by MANUFACTURER",
+       x = "UNTI SALES",
+       y = "DOLLAR SALES") +
+  theme_minimal() +
+  theme(legend.position = "bottom")  # Adjust legend position if needed
+
+```
+
+> This is where Peppy lives, as they are one of the highest in unit sales and revenue it is grabbing essentially everything. 
+
+#Make the small pink woodsy
+
+```{r}
+pinkwoodsy_small <- df[grep("pink|woodsy", df$ITEM, ignore.case = TRUE), ]
+
+```
+
+```{r}
+skim(pinkwoodsy_small)
+```
+
+```{r}
+
+# Assuming 'innovation' is your data frame
+model <- lm(DOLLAR_SALES ~ UNIT_SALES + CALORIC_SEGMENT + PACKAGE + CATEGORY + SEASON + REGION, data = pinkwoodsy_small)
+summary(model)
+
+
+```
+>r2 even higher than before of .8703. This one had about 60k more ovbservations to train on.
+
+## Cleaning
+
+> Rework pinkwoodsy for more features
+
+```{r}
+pinkwoodsy_small <- df %>%
+  filter(CATEGORY == "SSD",
+         CALORIC_SEGMENT == 1, # Specify each pattern separately
+         REGION %in% c("NEWMEXICO", "ARIZONA", "DESERT_SW"))
+
+pinkwoodsy_small <- pinkwoodsy_small %>%
+  mutate(
+    PACKAGE2 = str_extract(ITEM, "(CUP|JUG).*"),  # Extracts the part from CUP or JUG to the end.
+    ITEM = str_replace(ITEM, "(CUP|JUG).*", "")  # Replaces the CUP/JUG and everything after it with empty string in ITEM.
+  )
+```
+
+```{r}
+
+
+pinkwoodsy_small <- pinkwoodsy_small %>%
+  mutate(
+    TEMP = str_extract(ITEM, "\\d+\\.?\\d*.*"), # Extracts the part from the first number to the end.
+    PACKAGE2 = if_else(is.na(PACKAGE2), TEMP, paste(PACKAGE2, TEMP)), # Combines existing PACKAGE2 with new extraction if needed.
+    ITEM = str_replace(ITEM, "\\d+\\.?\\d*.*", ""), # Removes the numeric part and everything after it from ITEM.
+    TEMP = NULL  # Removes the temporary column.
+  )
+
+
+```
+
+```{r}
+na_rows <- pinkwoodsy_small %>%
+  filter(is.na(PACKAGE2))
+#na_rows
+#the above steps excised all packaging out of ITEM column
+```
+
+```{r}
+
+pinkwoodsy_small <- pinkwoodsy_small %>%
+  mutate(
+    GENTLE_DRINK = if_else(str_detect(ITEM, "GENTLE DRINK"), 1, 0), # Assigns 1 if "GENTLE DRINK" exists, otherwise 0.
+    ITEM = str_replace(ITEM, "GENTLE DRINK", "") # Removes "GENTLE DRINK" from ITEM.
+  )
+```
+
+```{r}
+
+pinkwoodsy_small <- pinkwoodsy_small %>%
+  mutate(
+    ENERGY_DRINK = if_else(str_detect(ITEM, "ENERGY DRINK"), 1, 0), # Assigns 1 if "ENERGY DRINK" exists, otherwise 0.
+    ITEM = str_replace(ITEM, "ENERGY DRINK", "") # Removes "ENERGY DRINK" from ITEM.
+  )
+
+```
+
+
+```{r}
+library(stringr)
+# Define the pattern as a regular expression
+pattern <- "ZERO CALORIES|ZERO CALORIE|ZERO SUGAR|SUGAR FREE|NO CALORIES"
+
+pinkwoodsy_small <- pinkwoodsy_small %>%
+  mutate(
+    CALORIC_SEGMENT_TEXT = str_extract(ITEM, pattern), # Extracts matching text based on the pattern.
+    ITEM = str_replace_all(ITEM, pattern, "") # Removes extracted text from ITEM.
+  )
+
+```
+
+
+```{r}
+
+pinkwoodsy_small <- pinkwoodsy_small %>%
+  mutate(
+    CALORIC_SEGMENT_TEXT = if_else(str_detect(ITEM, "\\bDIET\\b"), 
+                                   if_else(is.na(CALORIC_SEGMENT_TEXT), "DIET", paste(CALORIC_SEGMENT_TEXT, "DIET", sep=", ")), 
+                                   CALORIC_SEGMENT_TEXT)
+  )
+
+```
+
+```{r}
+
+
+# Function to remove the second instance of any repeating word
+remove_second_instance <- function(item) {
+  words <- unlist(str_split(item, "\\s+")) # Split item into words
+  unique_words <- unique(words) # Get unique words to check for repeats
+  for (word in unique_words) {
+    word_indices <- which(words == word) # Find all indices of the current word
+    if (length(word_indices) > 1) { # If there is more than one occurrence
+      words[word_indices[2]] <- "" # Remove the second occurrence
+    }
+  }
+  return(paste(words, collapse = " ")) # Reconstruct sentence without the second instance
+}
+
+# Apply the function to the 'ITEM' column
+pinkwoodsy_small <- pinkwoodsy_small %>%
+  mutate(ITEM = sapply(ITEM, remove_second_instance))
+
+
+# Remove specific columns
+pinkwoodsy_small <- select(pinkwoodsy_small, -PACKAGE2, -GENTLE_DRINK, -ENERGY_DRINK, -CALORIC_SEGMENT_TEXT)
+
+```
+
+```{r}
+head(pinkwoodsy_small)
+```
+
+```{r}
+write.csv(pinkwoodsy_small, "pinkwoodsy_small.csv", row.names = FALSE)
+```
+
+# FINAL THOUGHTS
+
+>Thorugh our analysis of a "Pink Woodsy" flavored launch, there was very little evidance that further modeling would create a reliable prediction. As the historical data is missing many accurate features we would like to see in order do explaine variation. A few of the features from this specific innovation product that are missing are: 
+1. Lack of compariabel flavors. Though there have been products in the past with Pink or Woodsy, there has never been any items with this combination. 
+2. Brand "Peppy" having no innovation product data. In our research of the brand we found they do not have any innovation data that would give us indications of how a new product would compete if launched.
+3. Lack of deffinition of which regions or areas would be considered "South." For this launch. 
+With these crucical factors either being excluded from modeling or using best estimates on the "closest" items we do not believe moving forward with prediciton of this would be advised. With a product such as this any type of trials data or directions on which items would be most comparable would help assure accuracy. 

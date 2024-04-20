@@ -1,0 +1,849 @@
+---
+title: "Modeling Product #3"
+author: "Michael"
+date:  "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    css: custom-styles.css
+    theme: null
+    highlight: null
+    toc: true
+    toc_float: false
+---
+
+# Set up 
+
+```{r setup, include=FALSE}
+if (!require("pacman")) install.packages("pacman")
+
+# Use pacman to load (and install if necessary) the specific packages you requested
+pacman::p_load(dplyr, ggplot2, tidyverse, tidytext, skimr, readr, tidyr, lubridate, stringr, knitr, kableExtra, tidymodels, pROC, xgboost, doParallel, vip, DALEXtra)
+#have to manually load 'caret' for some reason
+
+```
+
+## Taking a sample of the whole dataset
+
+```{r}
+df <- readRDS("swire_no_nas.rds")  #inject the data and we will sub-sample
+
+```
+
+```{r}
+
+regions_joinme <- read.csv("states_summary.csv")
+
+unique(regions_joinme$REGION)
+# "NORTHERN"    "DESERT_SW"   "PRAIRIE"     "CALI_NEVADA"  "MOUNTAIN"    "SOCAL"   "ARIZONA"    "NEWMEXICO"   "NOCAL"    "COLORADO"    "KANSAS" 
+
+str(regions_joinme)
+# Perform a left join using the merge() function
+df <- merge(df, regions_joinme[, c("MARKET_KEY", "REGION")], by = "MARKET_KEY", all.x = TRUE)
+rm(regions_joinme)
+
+```
+### Quick imputations 
+
+```{r}
+# Update CALORIC_SEGMENT values: 0 if 'DIET/LIGHT', otherwise 1
+df$CALORIC_SEGMENT <- ifelse(df$CALORIC_SEGMENT == "DIET/LIGHT", 0, 1)
+df$MARKET_KEY <- as.character(df$MARKET_KEY)
+df <- df %>%
+  mutate(
+    MONTH = as.numeric(substr(DATE, 6, 7)),  # Extract the month from YYYY-MM-DD format
+    SEASON = case_when(
+      MONTH %in% c(12, 01, 02) ~ "WINTER",
+      MONTH %in% c(03, 04, 05) ~ "SPRING",
+      MONTH %in% c(06, 07, 08) ~ "SUMMER",
+      MONTH %in% c(09, 10, 11) ~ "FALL",
+      TRUE ~ NA_character_  # This is just in case there are any undefined values
+    )
+  )
+
+
+
+
+```
+
+```{r}
+str(df)
+```
+
+## Making a 10% sample of the data to shrink it 
+
+```{r}
+# Assuming df is your dataframe
+set.seed(123) # Set a random seed for reproducibility
+sampled_df <- df[sample(1:nrow(df), 2446143), ]
+rm(df)
+```
+
+```{r}
+df <- sampled_df
+rm(sampled_df)
+```
+
+```{r}
+#skim(df)
+```
+
+```{r}
+summary(df)
+```
+### Linear model on sampled data looks the same largely 
+
+```{r}
+# Perform a linear regression with UNIT_SALES as the dependent variable
+# and PRICE (or your chosen variable) as the independent variable
+linear_model <- lm(DOLLAR_SALES ~ UNIT_SALES, data = df)
+
+# Print the summary of the linear model to see the results
+summary(linear_model)
+
+```
+
+
+```{r fig.width=10, fig.height=10}
+# Create a scatter plot with the regression line, colored by MANUFACTURER
+ggplot(df, aes(x = UNIT_SALES, y = DOLLAR_SALES, color = MANUFACTURER)) +
+  geom_point(alpha = 0.5) +  # Adjust alpha to avoid overplotting, if necessary
+  geom_smooth(method = "lm", color = "black", se = FALSE) +  # Add linear regression line without confidence band for clarity
+  labs(title = "Linear Model of UNIT_SALES vs. DOLLAR_SALES by MANUFACTURER",
+       x = "UNIT SALES",
+       y = "DOLLAR SALES") +
+  theme_minimal() +
+  theme(legend.position = "bottom")  # Adjust legend position if needed
+
+```
+```{r}
+# create a table of total values by brand
+brand_summary <- df %>%
+  group_by(BRAND) %>%
+  summarise(
+    total_units_sold = sum(UNIT_SALES),
+    total_revenue = sum(DOLLAR_SALES),
+    avg_price = total_revenue / total_units_sold,
+    total_days_sold = n() # Count the number of rows for each brand
+  ) %>%
+  arrange(desc(total_revenue)) %>%  # Order by revenue in descending order
+  mutate(rank = row_number()) 
+
+summary(brand_summary)
+print(brand_summary[brand_summary$BRAND == "VENOMOUS BLAST", ])
+
+```
+>VENOMOUS BLAST does have a decent amount of sales ranking 130 of 288 in total revenue. They surprisingly have a low average price and a low total days sold.  
+
+
+## Take a look at your brand..
+
+```{r fig.height=10, fig.width=10}
+
+# Filter the dataframe for only 'Venomous Blast'
+filtered_df <- df %>% 
+  filter(BRAND == "VENOMOUS BLAST")
+
+summary(filtered_df)
+
+# Create the plot
+ggplot(filtered_df, aes(x = UNIT_SALES, y = DOLLAR_SALES)) +
+  geom_point(color = "red", alpha = 1) +  # Bright red points with full opacity
+  geom_smooth(method = "lm", color = "black", se = FALSE) +  # Add linear regression line without confidence band
+  labs(title = "Linear Model of UNIT_SALES vs. DOLLAR_SALES for VENOMOUS BLAST",
+       x = "UNIT SALES",
+       y = "DOLLAR SALES") +
+  theme_minimal() +
+  theme(legend.position = "none")  
+
+
+```
+
+## Sales by Week of the year
+
+```{r}
+filtered_df %>%
+  mutate(DATE = as.Date(DATE)) %>%
+  mutate(WEEK = as.integer(format(DATE, "%U"))) %>%
+  group_by(WEEK) %>%
+  summarise(total_sales = sum(UNIT_SALES)) %>%
+  ggplot(aes(x = WEEK, y = total_sales)) +
+  geom_line(color = "black") +  # Blue line connecting points
+  labs(title = "Total Sales by Week of the Year",
+       x = "Week of the Year",
+       y = "Total Unit Sales") +
+  theme_minimal()
+```
+> Ths graph demonstrates that sales of venomus blast has a large amount of variance through out the year. 
+
+```{r}
+#find the best 13 weeks
+library(zoo)
+# Calculate total sales for each group of 13 consecutive weeks
+sales_by_group <- filtered_df %>%
+  mutate(DATE = as.Date(DATE)) %>%
+  mutate(WEEK = as.integer(format(DATE, "%U"))) %>%
+  group_by(WEEK) %>%
+  summarise(total_sales = sum(UNIT_SALES)) %>%
+  mutate(sales_in_group = rollsum(total_sales, 13, align = "left", fill = NA)) %>%
+  mutate(week_label = paste0("Week ", WEEK + 1, " to Week ", WEEK + 13)) %>%
+  arrange(WEEK) %>%  # Order by WEEK
+  filter(!is.na(sales_in_group))  # Remove rows with sales_in_group = NA
+
+# Plot the bar chart
+sales_by_group$week_label <- factor(sales_by_group$week_label, levels = sales_by_group$week_label[order(sales_by_group$WEEK)])
+ggplot(sales_by_group, aes(x = factor(week_label), y = sales_in_group)) +
+  geom_bar(stat = "identity", fill = "black") +
+  labs(title = "Total Sales for Each 13-Week Grouping",
+       x = "Weeks (Starting from Week 1)",
+       y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+```
+> From this graph we see that weeks 24 to 36 historically have the highest unit sales of VENOMOUS BLAST
+
+```{r}
+#find the best 13 weeks for Kiwano sales
+# Calculate total sales for each group of 13 consecutive weeks
+sales_by_kiwano <- df %>%
+  filter(str_detect(BRAND, "VENOMOUS BLAST"),
+         CATEGORY == "ENERGY") %>%
+  mutate(DATE = as.Date(DATE)) %>%
+  mutate(WEEK = as.integer(format(DATE, "%U"))) %>%
+  group_by(WEEK) %>%
+  summarise(total_sales = sum(UNIT_SALES)) %>%
+  mutate(sales_in_group = rollsum(total_sales, 13, align = "left", fill = NA)) %>%
+  mutate(week_label = paste0("Week ", WEEK + 1, " to Week ", WEEK + 13)) %>%
+  arrange(WEEK) %>%  # Order by WEEK
+  filter(!is.na(sales_in_group))  # Remove rows with sales_in_group = NA
+
+# Plot the bar chart
+sales_by_kiwano$week_label <- factor(sales_by_kiwano$week_label, levels = sales_by_kiwano$week_label[order(sales_by_kiwano$WEEK)])
+ggplot(sales_by_kiwano, aes(x = factor(week_label), y = sales_in_group)) +
+  geom_bar(stat = "identity", fill = "black") +
+  labs(title = "Total Sales for Each 13-Week Grouping",
+       x = "Weeks (Starting from Week 1)",
+       y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+```
+>This graph shows the best weeks sales of any kiwano drink is week 19 to 31. 
+
+
+```{r}
+#find the best 13 weeks for Kiwano sales
+# Calculate total sales for each group of 13 consecutive weeks
+sales_by_energy <- df %>%
+  filter(CATEGORY == "ENERGY",
+         str_detect(ITEM, "KIWANO"),
+         str_detect(PACKAGE, "16")) %>%
+  mutate(DATE = as.Date(DATE)) %>%
+  mutate(WEEK = as.integer(format(DATE, "%U"))) %>%
+  group_by(WEEK) %>%
+  summarise(total_sales = sum(UNIT_SALES)) %>%
+  mutate(sales_in_group = rollsum(total_sales, 13, align = "left", fill = NA)) %>%
+  mutate(week_label = paste0("Week ", WEEK + 1, " to Week ", WEEK + 13)) %>%
+  arrange(WEEK) %>%  # Order by WEEK
+  filter(!is.na(sales_in_group))  # Remove rows with sales_in_group = NA
+
+# Plot the bar chart
+sales_by_energy$week_label <- factor(sales_by_energy$week_label, levels = sales_by_energy$week_label[order(sales_by_energy$WEEK)])
+ggplot(sales_by_energy, aes(x = factor(week_label), y = sales_in_group)) +
+  geom_bar(stat = "identity", fill = "black") +
+  labs(title = "Total Sales of Comparision Products in 13 Week Groupings",
+       x = "Weeks (Starting from Week 1)",
+       y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+```
+>In this Graph we are shown the best weeks for sales of Energy drinks with Kiwano flavors and packageing 16 is weeks 11 to 23 which is March 11th to June 9th
+
+## Made a new smaller "innovation" data fram
+
+```{r}
+innovation <- df %>% 
+  filter(CATEGORY == "ENERGY",
+         CALORIC_SEGMENT == 0,
+         str_detect(ITEM, "KIWANO"),
+         str_detect(PACKAGE, "16"))
+
+print(unique(innovation$ITEM))
+#there are 10 items with energy, diet, kiwano that come in packs of 16, but none of them are from VENOMOUS BLAST. 
+
+
+
+library(dplyr)
+library(lubridate)
+
+innovation <- innovation %>%
+  mutate(
+    MONTH = month(ymd(DATE)),  # Extract month using lubridate's ymd function
+    MONTH = as.factor(MONTH)   # Convert the extracted month into a factor
+  )
+
+str(innovation)
+```
+
+
+```{r}
+# Assuming 'innovation' is your data frame
+model <- lm(DOLLAR_SALES ~ UNIT_SALES + CALORIC_SEGMENT + PACKAGE + SEASON + REGION, data = innovation)
+summary(model)
+
+```
+
+>This model is showing an R2 of .975. With like the other models Region kansas being significant and then the size of the cup.There was only 8082 observations to go off of in this category, but I am wondering if we combine the model with this flavor, size and then sales for the first 13 weeks we can then apply that with a sales factor built based on VENOMOUS BLASTS best selling weeks to get demand. 
+
+
+### More exploration
+
+
+```{r}
+library(dplyr)
+
+small_group <- df %>%
+  filter(UNIT_SALES < 3300, DOLLAR_SALES < 3200)
+
+skim(small_group)
+```
+
+```{r fig.width=10, fig.height=10}
+# Create a scatter plot with the regression line, colored by MANUFACTURER
+ggplot(small_group, aes(x = UNIT_SALES, y = DOLLAR_SALES, color = MANUFACTURER)) +
+  geom_point(alpha = 0.5) +  # Adjust alpha to avoid overplotting, if necessary
+  geom_smooth(method = "lm", color = "black", se = FALSE) +  # Add linear regression line without confidence band for clarity
+  labs(title = "Linear Model of UNIT_SALES vs. DOLLAR_SALES by MANUFACTURER",
+       x = "UNTI SALES",
+       y = "DOLLAR SALES") +
+  theme_minimal() +
+  theme(legend.position = "bottom")  # Adjust legend position if needed
+
+```
+
+> Basically this is where Venomous Blast lives in this realm. Notice still that certain items just sell way better than others in terms of dollars. 
+
+
+#Make the small Kiwanao df
+> Create a Kiwano Small Data set
+
+```{r}
+kiwano_small <- df[grep("kiwano", df$ITEM, ignore.case = TRUE), ]
+```
+
+```{r}
+skim(kiwano_small)
+```
+
+
+
+
+```{r}
+
+# Assuming 'innovation' is your data frame
+model <- lm(DOLLAR_SALES ~ UNIT_SALES + CALORIC_SEGMENT + PACKAGE + CATEGORY + SEASON + REGION, data = kiwano_small)
+summary(model)
+```
+>r2 even higher than before of .9675. This one has many different factors that are showing significant and had about 10x the observations as the first grouping. 
+
+## Cleaning
+
+## Create redefined KIWANO set for modeling
+```{r}
+kiwano_small <- df %>%
+  filter(CATEGORY == "ENERGY",
+         str_detect(ITEM, "KIWANO"),
+         CALORIC_SEGMENT == 0,
+          str_detect(PACKAGE, "16"))
+```
+
+
+> Rework kiwanao for more features for XGboost Model
+
+```{r}
+
+kiwano_small <- kiwano_small %>%
+  mutate(
+    PACKAGE2 = str_extract(ITEM, "(CUP|JUG).*"),  # Extracts the part from CUP or JUG to the end.
+    ITEM = str_replace(ITEM, "(CUP|JUG).*", "")  # Replaces the CUP/JUG and everything after it with empty string in ITEM.
+  )
+```
+
+```{r}
+
+
+kiwano_small <- kiwano_small %>%
+  mutate(
+    TEMP = str_extract(ITEM, "\\d+\\.?\\d*.*"), # Extracts the part from the first number to the end.
+    PACKAGE2 = if_else(is.na(PACKAGE2), TEMP, paste(PACKAGE2, TEMP)), # Combines existing PACKAGE2 with new extraction if needed.
+    ITEM = str_replace(ITEM, "\\d+\\.?\\d*.*", ""), # Removes the numeric part and everything after it from ITEM.
+    TEMP = NULL  # Removes the temporary column.
+  )
+
+
+```
+
+```{r}
+na_rows <- kiwano_small %>%
+  filter(is.na(PACKAGE2))
+#na_rows
+#the above steps excised all packaging out of ITEM column
+```
+
+```{r}
+
+kiwano_small <- kiwano_small %>%
+  mutate(
+    GENTLE_DRINK = if_else(str_detect(ITEM, "GENTLE DRINK"), 1, 0), # Assigns 1 if "GENTLE DRINK" exists, otherwise 0.
+    ITEM = str_replace(ITEM, "GENTLE DRINK", "") # Removes "GENTLE DRINK" from ITEM.
+  )
+```
+
+```{r}
+
+kiwano_small <- kiwano_small %>%
+  mutate(
+    ENERGY_DRINK = if_else(str_detect(ITEM, "ENERGY DRINK"), 1, 0), # Assigns 1 if "ENERGY DRINK" exists, otherwise 0.
+    ITEM = str_replace(ITEM, "ENERGY DRINK", "") # Removes "ENERGY DRINK" from ITEM.
+  )
+
+```
+
+```{r}
+library(stringr)
+# Define the pattern as a regular expression
+pattern <- "ZERO CALORIES|ZERO CALORIE|ZERO SUGAR|SUGAR FREE|NO CALORIES"
+
+kiwano_small <- kiwano_small %>%
+  mutate(
+    CALORIC_SEGMENT_TEXT = str_extract(ITEM, pattern), # Extracts matching text based on the pattern.
+    ITEM = str_replace_all(ITEM, pattern, "") # Removes extracted text from ITEM.
+  )
+
+```
+
+```{r}
+
+kiwano_small <- kiwano_small %>%
+  mutate(
+    CALORIC_SEGMENT_TEXT = if_else(str_detect(ITEM, "\\bDIET\\b"), 
+                                   if_else(is.na(CALORIC_SEGMENT_TEXT), "DIET", paste(CALORIC_SEGMENT_TEXT, "DIET", sep=", ")), 
+                                   CALORIC_SEGMENT_TEXT)
+  )
+
+```
+
+```{r}
+# Function to remove the second instance of any repeating word
+remove_second_instance <- function(item) {
+  words <- unlist(str_split(item, "\\s+")) # Split item into words
+  unique_words <- unique(words) # Get unique words to check for repeats
+  for (word in unique_words) {
+    word_indices <- which(words == word) # Find all indices of the current word
+    if (length(word_indices) > 1) { # If there is more than one occurrence
+      words[word_indices[2]] <- "" # Remove the second occurrence
+    }
+  }
+  return(paste(words, collapse = " ")) # Reconstruct sentence without the second instance
+}
+
+# Apply the function to the 'ITEM' column
+kiwano_small <- kiwano_small %>%
+  mutate(ITEM = sapply(ITEM, remove_second_instance))
+
+
+# Remove specific columns
+kiwano_small <- select(kiwano_small, -PACKAGE2, -GENTLE_DRINK, -ENERGY_DRINK, -CALORIC_SEGMENT_TEXT)
+
+```
+
+```{r}
+head(kiwano_small)
+```
+
+```{r}
+write.csv(kiwano_small, "kiwano_small.csv", row.names = FALSE)
+```
+
+# FINAL THOUGHTS
+
+> Though Kiwano and energy drinks have very few rows. I do think there is potential here to find a good fitting model that can predict launch sales. I am thinking that if we can get a model that will predict the sales of uints of energy drinks, with size 16, and kiwano flavor we can then use that combined with the current sales rate of VENOMUS BLAST launches to get an accurate forecast. As far as selection of what weeks would be best to sell I don't see any other way than by using historical best 13 weeks sales of either Venmous Blast, energy drinks, or kiwano flavored drinks. 
+
+# XGBoost
+
+```{r}
+# Set up
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, skimr, knitr, caret, readr, 
+               ggplot2, dplyr, tidymodels, pROC, xgboost, doParallel, vip, DALEXtra)
+
+```
+
+## Create One Hot Encoded DF for Model
+
+```{r}
+# Read the CSV file
+kiwano_small <- read.csv("kiwano_small.csv")
+
+# Convert 'Date' column to Date format
+kiwano_small$DATE <- as.Date(kiwano_small$DATE)
+
+# List to store unique values for each variable
+unique_values_list <- list()
+
+# Columns to get unique values for
+columns_to_get_unique_values <- c("BRAND", "PACKAGE", "ITEM", "REGION", "SEASON")
+
+# Get unique values for each variable and store in the list
+for (col in columns_to_get_unique_values) {
+  unique_values_list[[col]] <- unique(kiwano_small[[col]])
+}
+
+# Loop over unique regions and create new columns
+for (region in unique_values_list$REGION) {
+  kiwano_small[[region]] <- as.integer(grepl(region, kiwano_small$REGION))
+}
+
+# Loop over unique brands and create new columns
+for (brand in unique_values_list$BRAND) {
+  kiwano_small[[brand]] <- as.integer(grepl(brand, kiwano_small$BRAND))
+}
+
+# Loop over unique brands and create new columns
+for (item in unique_values_list$ITEM) {
+  kiwano_small[[item]] <- as.integer(grepl(item, kiwano_small$ITEM))
+}
+
+# Loop over unique regions and create new columns
+for (package in unique_values_list$PACKAGE) {
+  kiwano_small[[package]] <- as.integer(grepl(package, kiwano_small$PACKAGE))
+}
+
+# Loop over unique regions and create new columns
+for (season in unique_values_list$SEASON) {
+  kiwano_small[[season]] <- as.integer(grepl(season, kiwano_small$SEASON))
+}
+
+# Add new columns for week since launch and week of the year
+kiwano_small <- kiwano_small %>%
+  mutate(
+    Week_Of_Year = week(DATE)
+  ) %>%
+  group_by(ITEM) %>%
+  mutate(
+    Week_Since_Launch = as.integer((DATE - min(DATE)) / 7) + 1
+  ) %>%
+  ungroup()  # Ungroup the data to ensure the next operation applies to the entire data frame
+
+# Remove unnecessary columns
+one_hot_kiwano <- kiwano_small %>%
+  select(-MARKET_KEY, -CALORIC_SEGMENT, -CATEGORY, -MANUFACTURER, -BRAND, -REGION, -PACKAGE, -SEASON, -ITEM)
+
+head(one_hot_kiwano)
+
+write.csv(one_hot_kiwano, "one_hot_kiwano.csv", row.names = FALSE)
+```
+
+## Load and Prepare the data
+
+```{r}
+# Load and prepare dataset
+df1 <- read.csv("one_hot_kiwano.csv") 
+df1 <- df1 %>% 
+  select(-DATE, -MONTH, -WINTER, -SPRING, -FALL, -DOLLAR_SALES, -SUMMER)
+```
+
+```{r}
+# Summarize the dataset
+skimr::skim(df1)
+```
+
+> One Hot encoded down to just over 8000 rows from sampled data and up to 33 features.
+
+```{r}
+#Remove outliers in top 1% of Unit Sales. 
+df1 <- df1 %>% filter(UNIT_SALES < quantile(UNIT_SALES, 0.99))
+
+```
+
+```{r}
+# Split the data
+set.seed(123)
+df_testtrn <- initial_split(df1, prop = 0.8, strata = UNIT_SALES)
+Train <- training(df_testtrn)
+Test <- testing(df_testtrn)
+
+# Prepare features and labels for XGBoost
+train_features <- Train[, -which(names(Train) == "UNIT_SALES")]
+train_labels <- Train$UNIT_SALES
+test_features <- Test[, -which(names(Test) == "UNIT_SALES")]
+test_labels <- Test$UNIT_SALES
+
+# Convert data to DMatrix format
+dtrain <- xgb.DMatrix(data = as.matrix(train_features), label = train_labels)
+dtest <- xgb.DMatrix(data = as.matrix(test_features), label = test_labels)
+
+```
+
+```{r}
+
+# Define XGBoost parameters
+set.seed(123)
+params <- list(
+  booster = "gbtree",
+  objective = "reg:squarederror",
+  eval_metric = "rmse",
+  eta = 0.05,
+  max_depth = 4,
+  min_child_weight = 3,
+  subsample = 0.7,
+  colsample_bytree = 0.6,
+  lambda = 1,
+  alpha = 1
+)
+
+```
+
+```{r}
+
+# Perform cross-validation to find the optimal number of boosting rounds
+cv_results <- xgb.cv(
+  params = params,
+  data = dtrain,  
+  nfold = 5,
+  nrounds = 500,  # Changed from 'num_boost_round' to 'nrounds'
+  early_stopping_rounds = 10,
+  metrics = "rmse",
+  seed = 123
+)
+best_nrounds <- cv_results$best_iteration
+```
+# Create Model
+
+```{r}
+# Train the final model using the best number of rounds found
+model_xgb <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = best_nrounds
+)
+
+```
+
+# Setup Train and Test
+
+```{r}
+
+# Make predictions and evaluate the model
+train_pred <- predict(model_xgb, dtrain)
+test_pred <- predict(model_xgb, dtest)
+train_rmse <- sqrt(mean((train_labels - train_pred)^2))
+test_rmse <- sqrt(mean((test_labels - test_pred)^2))
+
+
+```
+
+# Create Model Metrics
+
+```{r}
+
+# Calculate R-squared for the training set
+sst_train <- sum((train_labels - mean(train_labels)) ^ 2)
+ssr_train <- sum((train_labels - train_pred) ^ 2)
+r_squared_train <- 1 - (ssr_train / sst_train)
+
+# Calculate R-squared for the test set
+sst_test <- sum((test_labels - mean(test_labels)) ^ 2)
+ssr_test <- sum((test_labels - test_pred) ^ 2)
+r_squared_test <- 1 - (ssr_test / sst_test)
+
+train_mape <- mean(abs((train_labels - train_pred) / train_labels)) * 100
+test_mape <- mean(abs((test_labels - test_pred) / test_labels)) * 100
+train_mae <- mean(abs(train_labels - train_pred))
+test_mae <- mean(abs(test_labels - test_pred))
+
+
+
+```
+
+# Output Results
+
+```{r}
+
+cat("Model Performance Metrics:\n",
+    "--------------------------\n",
+    "Training RMSE: ", train_rmse, "\n",
+    "Test RMSE: ", test_rmse, "\n",
+    "Training R-squared: ", r_squared_train, "\n",
+    "Test R-squared: ", r_squared_test, "\n",
+    "Training MAE: ", train_mae, "\n",
+    "Test MAE: ", test_mae, "\n",
+    "Training MAPE: ", train_mape, "%\n",
+    "Test MAPE: ", test_mape, "%\n", sep="")
+
+
+```
+
+>For the Kiwano Energy model, Our train RMSE is 100.29 and test 109.32. We expect to see the drop from train to test. With the difference we may need to check if there is slight overfitting. With the R2 for test and train are both moderate at .68% training .67% testing, this indicates there is some but not all variance eplained by our model. Our MAE also is low and does not contain a significant difference between training and test. The last metric, MAPE, both values are at 232% meaning that we are with about 224% of the actual values. Overall this model does show some predictive power but with more features we maybe able to get stronger predictive power. 
+
+```{r}
+# Calculate feature importance
+importance_matrix2 <- xgb.importance(feature_names = colnames(train_features), model = model_xgb)
+
+# View the feature importance scores
+print(importance_matrix2)
+
+xgb.plot.importance(importance_matrix = importance_matrix2)
+```
+>From this Importance matrix we see that brand and size seem to be the two biggest contributors to our model. We also see that the created featrure Week_Since_Launche is playing a large part in the creation of predictions.  
+
+## Create Dummy Data and attempt prediction
+
+```{r}
+# Define vectors for each category
+regions <- 1:11
+brands <- 1:6
+items <- 1:7
+package_options <- 1:4
+
+# Create data frame with all combinations of categories
+combinations <- expand.grid(Region = regions, Brand = brands, Item = items, Package = package_options)
+
+# Duplicate each combination 52 times to represent each week of the year
+final_df_replicated <- combinations[rep(row.names(combinations), each = 52), ]
+
+# Add a column with values from 1 to 52 for each combination
+final_df_replicated$Week_of_Year <- rep(1:52, times = nrow(combinations))
+
+# Duplicate each combination 52 times to represent each week of the year
+final_df_replicated <- final_df_replicated[rep(row.names(final_df_replicated), each = 13), ]
+
+# Add a column with values from 1 to 13 for each combination
+final_df_replicated$Week_Since_Launch <- rep(1:13, times = nrow(combinations))
+
+final_df_replicated$Region <- unique_values_list$REGION[final_df_replicated$Region]
+final_df_replicated$Brand <- unique_values_list$BRAND[final_df_replicated$Brand]
+final_df_replicated$Item <- unique_values_list$ITEM[final_df_replicated$Item]
+final_df_replicated$Package <- unique_values_list$PACKAGE[final_df_replicated$Package]
+
+# List to store unique values for each variable
+new_unique_values_list <- list()
+
+# Columns to get unique values for
+new_columns_to_get_unique_values <- c("Region", "Brand", "Item", "Package")
+
+# Get unique values for each variable and store in the list
+for (col in new_columns_to_get_unique_values) {
+  new_unique_values_list[[col]] <- unique(final_df_replicated[[col]])
+}
+
+# Loop over unique regions and create new columns
+for (Region in new_unique_values_list$Region) {
+  final_df_replicated[[Region]] <- as.integer(final_df_replicated$Region == Region)
+}
+
+# Loop over unique regions and create new columns
+for (Brand in new_unique_values_list$Brand) {
+  final_df_replicated[[Brand]] <- as.integer(final_df_replicated$Brand == Brand)
+}
+
+# Loop over unique regions and create new columns
+for (Item in new_unique_values_list$Item) {
+  final_df_replicated[[Item]] <- as.integer(final_df_replicated$Item == Item)
+}
+
+# Loop over unique regions and create new columns
+for (Package in new_unique_values_list$Package) {
+  final_df_replicated[[Package]] <- as.integer(final_df_replicated$Package == Package)
+}
+
+#Create dummy_data and remove non one hot encoded data
+dummy_data <- final_df_replicated %>%
+  select(-Region, -Brand, -Item, -Package)
+
+#add a Unit sales column
+dummy_data$UNIT_SALES <- NA
+dummy_data$UNIT_SALES <- as.numeric(dummy_data$UNIT_SALES)
+```
+
+## Assure Features are Matching and Predict
+```{r}
+#rename columes to match original features
+dummy_data <- dummy_data %>%
+  rename(
+    `MYTHICAL.BEVERAGE.ULTRA` = `MYTHICAL BEVERAGE ULTRA`,
+    `SUPER.DUPER.PURE.ZERO` = `SUPER-DUPER PURE ZERO`,
+    `HILL.MOISTURE.JUMPIN.FISH` = `HILL MOISTURE JUMPIN-FISH`,
+    `VENOMOUS.BLAST` = `VENOMOUS BLAST`,
+    `POW.POW` = `POW-POW`,
+    `MYTHICAL.BEVERAGE.REHAB` = `MYTHICAL BEVERAGE REHAB`,
+    `MYTHICAL.BEVERAGE.ULTRA.KIWANO.UNFLAVORED.` = `MYTHICAL BEVERAGE ULTRA KIWANO UNFLAVORED `,
+    `SUPER.DUPER.PURE.ZERO.KIWANO.KEKE.` = `SUPER-DUPER PURE ZERO KIWANO KEKE `,
+    `RAINING.JUMPIN.FISH.GAME.FUEL.ZERO.CHARGED.KIWANO.SHOCK.` = `RAINING JUMPIN-FISH GAME FUEL ZERO CHARGED KIWANO SHOCK `,
+    `SUPER.DUPER.PURE.ZERO.KIWANO.` = `SUPER-DUPER PURE ZERO KIWANO `,
+    `VENOMOUS.BLAST.KIWANO.DURIAN.` = `VENOMOUS BLAST KIWANO DURIAN `,
+    `POW.POW.WYLDIN.KIWANO.` = `POW-POW WYLDIN KIWANO `,
+    `MYTHICAL.BEVERAGE.REHAB.KIWANO.` = `MYTHICAL BEVERAGE REHAB KIWANO `,
+    `X16SMALL.4ONE.CUP` = `16SMALL 4ONE CUP`,
+    `X16SMALL.MULTI.CUP` = `16SMALL MULTI CUP`,
+    `X16SMALL.24ONE.CUP` = `16SMALL 24ONE CUP`,
+    `X16SMALL.12ONE.CUP` = `16SMALL 12ONE CUP`, 
+    `Week_Of_Year`  = `Week_of_Year`
+  )
+
+# Check for Matching Features
+#Get the column names of Test and dummy_data
+names_Test <- names(Test)
+names_dummy_data <- names(dummy_data)
+
+# Find the matching column names
+matching_names <- intersect(names_Test, names_dummy_data)
+
+# Find the non-matching column names
+non_matching_names_Test <- setdiff(names_Test, matching_names)
+non_matching_names_dummy_data <- setdiff(names_dummy_data, matching_names)
+
+#Print the matching and non-matching column names
+cat("Matching column names:", paste(matching_names, collapse = ", "), "\n")
+cat("Non-matching column names in Test:", paste(non_matching_names_Test, collapse = ", "), "\n")
+cat("Non-matching column names in dummy_data:", paste(non_matching_names_dummy_data, collapse = ", "), "\n")
+
+
+# Get the column names of the Test dataframe
+test_colnames <- colnames(Test)
+
+# Reorder columns of dummy_data to match the order of columns in Test
+dummy_data <- dummy_data %>%
+  select(all_of(test_colnames))
+
+# Prepare features for XGBoost
+dummy_features <- dummy_data[, -which(names(dummy_data) == "UNIT_SALES")]
+
+# Convert data to DMatrix format
+dummy_dmatrix<- xgb.DMatrix(data = as.matrix(dummy_features))
+
+dummy_pred <- predict(model_xgb, dummy_dmatrix)
+
+# Add the predictions to dummy_data
+dummy_data$Predictions <- dummy_pred
+
+# Convert predictions to integers
+dummy_data$Predictions <- round(dummy_pred)
+
+# Convert to integer data type
+dummy_data$Predictions <- as.integer(dummy_data$Predictions)
+
+summary(dummy_data$Predictions)
+
+ggplot(dummy_data, aes(x = Predictions)) +
+  geom_density(fill = "blue", alpha = 0.5) +
+  labs(title = "Density Plot of Predicted Values",
+       x = "Predicted Values",
+       y = "Density")
+
+dummy_data %>%
+  group_by(Week_Since_Launch, Week_Of_Year) %>%
+  summarize(Total_Prediction = sum(Predictions, na.rm = TRUE))%>%
+  filter(Week_Since_Launch <=13,
+         Week_Of_Year <=24)
+```
+> In this first round of predcition we attempted to have our model predict a value for every combination of Item, Region, Brand, and Package, Week of the year and week since launch (1-13) from our comparable data report. The model will need some refinement as it is predicting many negative values, but once tuned this could provide a way to make comparable predictions of a new product launching for 13 weeks in any range during the year. 
+
